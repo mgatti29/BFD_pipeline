@@ -8,6 +8,7 @@ def save_obj(name, obj):
         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
         
 def load_obj(name):
+    
         try:
             with open(name + '.pkl', 'rb') as f:
                 return pickle.load(f)#, encoding='latin1')

@@ -1,0 +1,102 @@
+# measure moments targets
+#srun --nodes= 24 --tasks-per-node=1 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline.py
+# make targets - whatever is OK, no cost basically.
+#srun --nodes= 20 --tasks-per-node=1 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline.py
+#measure moments deep field
+#srun --nodes= 10 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline.py
+#make templates
+#srun --nodes=10 --tasks-per-node=20 --cpus-per-task=3 --cpu-bind=cores --mem=110GB python run_pipeline_
+#srun --nodes=10 --tasks-per-node=2 --cpus-per-task=30 --cpu-bind=cores --mem=110GB python run_pipeline_
+
+
+
+
+
+run:
+     #- measure_moments_targets
+     #- make_targets
+     #- measure_moments_templates
+     - make_templates
+
+
+######################################################################
+#                       general config
+######################################################################
+general:
+    output_folder: '/global/cscratch1/sd/mgatti/BFD/runs/test_newPiFF_DES2347-5414_correct_noise/'
+    n: 4.     # Default: 4
+    sigma: 0.45  # Default: 0.5
+    band_dict: [['r',0.7],['i',0.3],['z',0.01]]
+    bands: ['i', 'r', 'z']
+    
+######################################################################
+#                       measure_moments_targets
+######################################################################
+
+measure_moments_targets:
+    # This first part parallelises (MPI) on tiles and it does 5x multiprocessing on chunk size.
+    # Usually 1 tile per node is enough.
+    
+    path_data: '/global/cscratch1/sd/mgatti/BFD/data/'
+    tiles: ['DES2347-5414'] # It can be 'ALL', a random number of tiles (e.g., 20), or a list with the names of the tiles.
+    agents_chunk: 5
+    chunk_size: 5000. # It measures the moments CHUNK_SIZE targets simulataneously
+    max_target_per_tile: 10000000
+    MOF_subtraction: False
+    cut_psf : [False,0]
+    
+    
+    
+    
+######################################################################
+#                       make_target
+######################################################################
+
+make_targets:
+    # we divide the targets into bins depending on the covariance of Mf.
+    sigmaM_min: 1500
+    sigmaM_max: 15000
+    accuracy: 0.1 # the bins are such that they cover 20 % of Cov_Mf
+    steps: 20
+    # additional cuts:
+    sn_min: 0 # minimum S/N on flux
+    sn_max: 5000
+    Mf_max: 90000
+    Mf_min: 0.
+    
+
+    
+
+                  
+######################################################################
+#                       measure_moments_templates
+######################################################################
+
+measure_moments_templates:
+    # There are ~ 244 tiles in des y3 deep fields. it's all parallelised with MPI, running on each tile.
+    # srun --nodes= 30 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline.py
+
+
+    MOF_table_path: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/mof/run-ugriz-mof02.fits'
+    path_coadd_deepfields: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/'
+    deep_fields_catalog: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/y3_deep_fields.fits'
+    fields: ['COSMOS_UltraVISTA_Willv2', 'SN-C3', 'SN-E2', 'SN-X3']
+    MOF_subtraction: True
+    cut_psf : [True, 25]
+    
+
+######################################################################
+#                       make_templates
+######################################################################
+
+make_templates:
+
+
+    sigma_max: 6.5 # we only keep templates within sigma_max (chi2 includes MX,MY,Mf,det supression)
+    sigma_step: 1.2 #maximum shift between template
+    xy_max: 2
+                  
+    sn_min: 0 # minimum S/N on flux
+    sn_max: 50000
+    Mf_max: 90000
+    Mf_min: 0.

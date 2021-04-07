@@ -217,12 +217,7 @@ class Image:
                 ax[index_band+12,0].set_ylabel(self.bands[index_band]+' band\n psf ')
             
     def compute_noise(self, del_list = True):
-        
-        # old and wrong
         self.noise_rms =  [[np.mean(1./self.wtlist[b][i][(self.wtlist[b][i]!= 0.) & (self.masklist[b][i] == 0)]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
-        
-        # noise.append(1./np.sqrt(np.median(wimgs[i][wimgs[i]>0],axis=None)))
-        self.noise_rms =  [[1./np.sqrt(np.median(self.wtlist[b][i][(self.wtlist[b][i]!= 0.) & (self.masklist[b][i] == 0)])) for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
         
         if del_list:
             self.wtlist = None
@@ -486,7 +481,7 @@ class Image:
                     try:
                         noise_rms = self.noise_rms[index_band][exp]
                     except:
-                        noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
+                        noise_rms = np.mean(1./self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])
                     noise.append(noise_rms)
                     bandlist.append(self.bands[index_band])
         
@@ -516,7 +511,7 @@ class Image:
             try:
                 noise_rms = self.noise_rms[index_band][exp]
             except:
-                noise_rms  = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
+                noise_rms = np.mean(1./self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])
             
             if MOF_subtraction:
                 img = self.imlist[index_band][exp] - self.MOF_model_rendered[index_band][exp]
