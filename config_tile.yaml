@@ -2,7 +2,7 @@
 # Recommended options to run this at nersc .
 ##################################################
 # make_tiles_tt
-# srun --nodes=25 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline_3s.py
+# srun --nodes=20 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline_3s.py
 # make_targets:
 # srun --nodes=1 --tasks-per-node=1 --cpus-per-task=60 --cpu-bind=cores --mem=110GB python run_pipeline_3s.py
 # make_templates:
@@ -31,7 +31,7 @@ run:
 
 
 general:
-    output_folder: '/global/cscratch1/sd/mgatti/BFD/runs_collab_meeting/tilerun_poisson_det_200templates_blending_1.0radius_0.55_shredder_shearedpositions/'
+    output_folder: '/pscratch/sd/m/mgatti/BFD/tilerun_poisson_det_200templates_default_blends0arcsec'
     # bfd settings ********
     n: 4.     #Default:  4.
     sigma: 0.55  # Default: 0.55
@@ -62,9 +62,9 @@ make_tiles_tt:
     size_tile: 500 #  number of pixels on a side. The normal pixel scale ->  1 pixel ~ 0.26 arcsec. Note that the most external 40 pixels are never used.
     gal_per_tile: 30 #this is the number of injected galaxies per tile. The number of detected galaxies will depend on the noise level & detection step.
     number_of_replicas: 200 # see below.
-    n_targets: 6000 # the *total* number of injected targets will be n_targets * number_of replicas. For templates number_of_replicas is ignored.  
+    n_targets: 12000 # the *total* number of injected targets will be n_targets * number_of replicas. For templates number_of_replicas is ignored.  
     n_templates: 5000
-    models: '/project/projectdirs/des/BFD_Y6/bfd/Marco/all_100k_200_size.npy' # models used to inject galaxies.
+    models: '/global/u2/m/mgatti/BFD_pipeline/data/all_100k_200_size.npy' # models used to inject galaxies.
     size_treshold: 1. # exclude models too big (size bigger than 1. arcsec).
     
     # noise of targets & templates ********
@@ -90,7 +90,7 @@ make_tiles_tt:
     maskless: True #if True, tiles won't have masks effects. [to be implemented]
 
     ## 
-    radius_blends_templates: 1. # In arcsec. It groups templates together within X arcsec. It doesn't deblend /templates &targets) within that radius.
+    radius_blends_templates: 4. # In arcsec. It groups templates together within X arcsec. It doesn't deblend /templates &targets) within that radius.
     shredder: True # deblend neighbours ***
     g1: [0.02,-0.02]
     g2: [0.,0.]
