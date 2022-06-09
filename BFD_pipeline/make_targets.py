@@ -64,7 +64,7 @@ def make_targets(output_folder,**config):
         files_simulated_p = glob.glob(output_folder+'/targets/{1}{0}*.fits'.format('targets','ISp_'))
         files_simulated_m = [f.replace('ISp_','ISm_') for f in files_simulated_p]      
         
-      
+        #print (add_labels)
         for add in add_labels:
             nlost = 0
             
@@ -75,7 +75,7 @@ def make_targets(output_folder,**config):
                 if not os.path.exists(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add)):
                     # read all the target files 
                     files = glob.glob(output_folder+'/targets/{1}{0}*.fits'.format(tt,add))
-
+                
                     if add =='ISp_':
                         files = files_simulated_p
                     if add =='ISm_':
@@ -126,10 +126,9 @@ def make_targets(output_folder,**config):
                         new_cols = pf.ColDefs(cols)
                         hdu = pf.BinTableHDU.from_columns(mute[1].columns + new_cols)
                         hdu.data['NOISETIER'][~mask] = -1
-                        try:
-                             hdu.data['AREA'][~mask] = 1
-                        except:
-                            pass
+
+                        #except:
+                        #    pass
                         for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
                             hdu.header[key] = mute[0].header[key]
                         for cname in mute[1].columns.names:
@@ -143,15 +142,27 @@ def make_targets(output_folder,**config):
                                 hdu.data[cname][sofar:sofar+nn] = mute[1].data[cname]
                                 sofar += nn  
 
+                                
+                        mask= (~np.isnan(occ)) & (occ>0.) & (~np.isnan(mf)) #& (noisetier == NOISE_TIER_MASK)
+                        
+                        #I think we can assign random values that are different from nan here ****
+                        indx_ = np.arange(hdu.data['covariance'].shape[0])[mask]
+                        indx = indx_[np.random.randint(0,len(indx_),len(mask[~mask]))]
+                        hdu.data['covariance'][~mask,:] = hdu.data['covariance'][indx,:]
+
+                        if 1 ==1:
+                            mask__ = (~mask) 
+                            hdu.data['moments'][mask__,:] = 0.
+                            #hdu.data['covariance'][mask__,:] = 1. # I think we can assign random values that are different from nan here ****
+                            hdu.data['AREA'][mask__] = -1.
+    
                         for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
                             hdulist[0].header[key] = mute[0].header[key]
                         hdulist[0].header['STAMPS'] = mute[0].header['STAMPS']
                         #hdulist[0].header['NLOST'] = nlost
-                        print ( hdulist[0].header)
+                 
                         hdulist.append(hdu)
                         del hdu
-
-
 
                         try:
                             hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
@@ -163,8 +174,21 @@ def make_targets(output_folder,**config):
 
 
         # MAKE NOISE TIERS *******************************************************************************
-        filex = (output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
+        
+
+                    
+        
+        filex = (output_folder+'/{1}{0}_sample_g.fits'.format(tt,'ISp_'))
+        if os.path.exists(filex):
+            pass
+        else:
+            filex = (output_folder+'/{1}{0}_sample_g.fits'.format(tt,''))
+            
+            
+        
+        
         print ('')
+        print (filex)
         print ('')
         
         
@@ -185,6 +209,7 @@ def make_targets(output_folder,**config):
             if os.path.exists(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add)):
                 print ('saving')
                 for xx,tt in enumerate(['targets']):
+                    print (output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
                     m_ = pf.open(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
                     for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
                         hdulist[0].header[key] = m_[0].header[key]
@@ -207,7 +232,8 @@ def make_targets(output_folder,**config):
 
 
                     print (len(mask[mask]),len(mask))
-                    hdu.data['AREA'][~mask] = 1
+                    m__ = (~mask) & (hdu.data['AREA']==0)
+                    hdu.data['AREA'][m__] = 1
 
                     for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
                         hdu.header[key] = m_[0].header[key]
