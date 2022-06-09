@@ -7,6 +7,8 @@ import numpy as np
 import astropy.io.fits as pf
 import bfd
 import argparse
+from bfd.keywords import *
+
 
 def createTiers(targetFile=None,
                 noiseStep = 0.2,
@@ -43,17 +45,18 @@ def createTiers(targetFile=None,
         print('# Acquiring target covariances from',f)
         hdu = pf.open(f)[1]
         if wtN is None:
-            wtN = hdu.header['WT_N']
-        elif hdu.header['WT_N']!=wtN:
+            hdrkeys['weightSigma']
+            wtN = hdu.header[hdrkeys['weightN']]
+        elif hdu.header[hdrkeys['weightN']]!=wtN:
             raise ValueError('WT_N in file ' + f + ' does not match')
         if wtSigma is None:
-            wtSigma = hdu.header['WT_SIG']
-        elif hdu.header['WT_SIG']!=wtSigma:
+            wtSigma = hdu.header[ hdrkeys['weightSigma']]
+        elif hdu.header[ hdrkeys['weightSigma']]!=wtSigma:
             raise ValueError('WT_SIG in file ' + f + ' does not match')
 
         # Save a random subsample of the covariances
         keep = np.random.random(size=len(hdu.data)) < sample
-        covs.append(hdu.data['cov_even'][keep])
+        covs.append(hdu.data['covariance'][keep])
         
     if not covs:
         raise ValueError('No target covariances acquired')
