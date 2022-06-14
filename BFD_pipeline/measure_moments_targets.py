@@ -518,8 +518,13 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                         
                         
                 image_storage = dict()
+                image_storage_ = dict()
                         
                 for index_t in frogress.bar(range(chunk_range[0],chunk_range[1])):
+                    if len(tab_detections.images) != len_file:
+                        print ('NO NO NO NO')
+                        import sys
+                        sys.exit()
                     try:
                         if index_fixed:
                             index = copy.copy(index_fixed)
@@ -666,18 +671,17 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                 mute_range = [index,index+1]
 
                                 image_storage[index] = dict()
+                        
 
 
-                                '''
-                                for index_band in range(3):
-                                    start = 1
-                                    end = tab_detections.images[index].ncutout[index_band]
-                                    image_storage[index][index_band] = dict()
-                                    for exp in range(start, end):  
+                                if config['debug']:
+                                    for index_band in range(3):
+                                        start = 1
+                                        end = tab_detections.images[index].ncutout[index_band]
+                                        image_storage[index][index_band] = dict()
+                                        for exp in range(start, end):  
+                                            image_storage[index][index_band][exp] = [tab_detections.images[index].imlist[index_band][exp],tab_detections.images[index].MOF_model_rendered[index_band][exp],tab_detections.images[index].seglist[index_band][exp]]
 
-
-                                        image_storage[index][index_band][exp] = [tab_detections.images[index].imlist[index_band][exp],tab_detections.images[index].MOF_model_rendered[index_band][exp],tab_detections.images[index].seglist[index_band][exp]]
-                                '''
 
 
 
@@ -962,16 +966,16 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                             except:
                                                 pass
 
-                                            '''
-                                            for index_band in range(3):
-                                                start = 1
-                                                end = tab_detections.images[index].ncutout[index_band]
-                                                image_storage[index][index_band] = dict()
-                                                for exp in range(start, end):  
+                                            if config['debug']:
+                                                for index_band in range(3):
+                                                    start = 1
+                                                    end = tab_detections.images[index].ncutout[index_band]
+                                                    image_storage[index][index_band] = dict()
+                                                    for exp in range(start, end):  
 
 
-                                                    image_storage[index][index_band][exp] = [tab_detections.images[index].imlist[index_band][exp],0,False]
-                                            '''
+                                                        image_storage[index][index_band][exp] = [tab_detections.images[index].imlist[index_band][exp],0,False]
+                                      
 
                                 if not (config['setup_image_sims']):
                                     if  config['MOF_subtraction'] :
@@ -1074,7 +1078,8 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                         save_(tab_targets_m,(path+'_chunk_{0}.fits'.format(iii)).replace('ISp','ISm'),config)
                 else:
                         save_(tab_targets,path+'_chunk_{0}.fits'.format(iii),config)
-                       # save_obj(path+'_image_storage_chunk_{0}.fits'.format(iii),image_storage)
+                        if config['debug']:
+                            save_obj(path+'_image_storage_chunk_{0}.fits'.format(iii),image_storage)
                         
                         
                       

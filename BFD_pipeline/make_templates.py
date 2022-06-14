@@ -22,7 +22,8 @@ from functools import partial
 from astropy import version 
 import gc
 import astropy.io.fits as fits
-
+import sys
+import time
 import timeit
 import copy
 import frogress
@@ -177,22 +178,44 @@ def make_templates(output_folder,**config):
         # read list of targets :
         noise_tier = []
         targets_properties = dict()
-        try:
-            targets = pf.open(output_folder+'/targets_sample_g.fits')
+        
+        # need to check if it exists. if it doesn't, exit.
+        path_sims = output_folder+'/ISp_targets_sample_g.fits'
+        path_data = output_folder+'/targets_sample_g.fits'
+        if os.path.exists(path_sims):
+            sims = True 
+        elif os.path.exists(path_data):
+            sims = False
+        else:
+            print ('no target file')
+            sys.exit()
+            
+        
+        if not sims:
+            #targets = pf.open(output_folder+'/targets_sample_g.fits')
             deep_files = glob.glob(output_folder+'/templates/'+'/t*.pkl')
 
-        except:
-            targets = pf.open(output_folder+'/ISp_targets_sample_g.fits')
+        else:
+            #targets = pf.open(output_folder+'/ISp_targets_sample_g.fits')
             deep_files = glob.glob(output_folder+'/templates/'+'/IS*.pkl')
 
         # number of entries:
 
         #Let's open the noisetier file.
-        try:
-            NT_ = pf.open(output_folder+'/noisetiers.fits')
-        except:
-            NT_ = pf.open(output_folder+'/ISP_targets_sample_g_noisetiers.fits')
-
+        if os.path.exists(output_folder+'/noisetiers.fits'):
+            count = 0
+            reading = True
+            while reading:
+                try:
+                    NT_ = pf.open(output_folder+'/noisetiers.fits')
+                    reading = False
+                except:
+                    time.sleep(10)
+                    count += 1
+                    if count > 6*5:
+                        reading = False
+                        sys.exit()
+                        
 
         noisetier = len(NT_)-1
         t_entries = np.arange(noisetier)
@@ -434,7 +457,4 @@ def make_templates(output_folder,**config):
 '''
 I can probably add another snippet of code that load all the files (templates) saved and create some reference file similar to the targets,
 where you. have covariances, moments, id's,ra,dec,tilename.
-
-
-
 '''
