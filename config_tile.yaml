@@ -78,7 +78,7 @@ make_tiles_tt:
     mode_detection: 'input' #'detection' or 'input'. Use input for stamp-like sims, detection for Poisson-like sims.
 
     # injecting blends with a given distance from first galaxy
-    injecting_blends: True
+    injecting_blends: False
     distance_blends: 0.
     
     # psf settings ******
