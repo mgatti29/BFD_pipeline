@@ -223,6 +223,7 @@ cpp_part:
     #noise_tiers: [13,14,15,16]
     number_targets_chunk: 12000
     add_labels: ['ISp_','ISm_'] 
-
+    
+    #stage: ['selection','selection_ave']
     stage: ['split','integrate','assemble']
-    ##stage: ['split','integrate','assemble'] 
+    
