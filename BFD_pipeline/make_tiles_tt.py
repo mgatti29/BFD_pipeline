@@ -62,6 +62,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             debug_images = dict()
             debug_images['det_stamps']= []
             debug_images['images_aftershredding'] = []
+            debug_images['wcs_coordinates'] =[]
             debug_images['images_preshredding']= []
             debug_images['images']= []
         
@@ -156,67 +157,69 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             
             
             
-            # shear positions (only for targets, templates are not sheared!) ********
+            # shear positions (only for targets, templates are not sheared!) **************
+            
+            
             if verbose:
                 print ('shear positions')
-            xc_a = []
-            yc_a = []
+
             if not do_templates:
+                for ll in range(2):
                 
-                shear = galsim.Shear(g1=config['g1'][0], g2=config['g2'][0])
-                
-                # this is the matrix that does shearing in u, v
-                a = shear.getMatrix()
+                    xc_a = []
+                    yc_a = []
+                    shear = galsim.Shear(g1=config['g1'][ll], g2=config['g2'][ll])
 
-                for i in range(len(x_a)):
-                    #print ('input  --- ', x_a[i],y_a[i])
+                    # this is the matrix that does shearing in u, v
+                    a = shear.getMatrix()
 
-                    # we need the canonical image center in (u, v) for undoing the
-                    # shearing
+                    for i in range(len(x_a)):
+                        #print ('input  --- ', x_a[i],y_a[i])
 
-                    row_cen = x_a[i]
-                    col_cen = y_a[i]
+                        # we need the canonical image center in (u, v) for undoing the
+                        # shearing
 
-
-                    jac = ngmix.jacobian.Jacobian(row=  config['size_tile']/2.,
-                          col =  config['size_tile']/2.,
-                          dudrow=0.,
-                          dudcol=0.263,
-                          dvdrow=0.263,
-                          dvdcol=0.)
-
-                    v_cen, u_cen = jac.get_vu(row=config['size_tile']/2., col=config['size_tile']/2.)
-
-                    # apply WCS to get to world coords
-                    v, u = jac.get_vu(row=row_cen, col=col_cen)
-
-                    # unshear (subtract and then add the canonical center in u, v)
-                    u = np.atleast_1d(u) - u_cen
-                    v = np.atleast_1d(v) - v_cen
-
-                    #print (u,v)
-
-                    pos = np.vstack((u, v))
-
-                    out = np.dot(a, pos)
-                    assert out.shape[1] == u.shape[0]
-                    u_sheared = out[0, :] + u_cen
-                    v_sheared = out[1, :] + v_cen
-                    #print (u_sheared,v_sheared)
-                    # undo the WCS to get to image coords
-                    rows_sheared, cols_sheared = jac.get_rowcol(v=v_sheared, u=u_sheared)
-                    #print ('output --',rows_sheared[0], cols_sheared[0])
-                    #print (row_cen, col_cen)
-                   # print ('')
+                        row_cen = x_a[i]
+                        col_cen = y_a[i]
 
 
-                    xc_a.append(rows_sheared[0])
-                    yc_a.append(cols_sheared[0])
-                    
-                    
-                    
-                x_a = copy.copy(np.array(xc_a))
-                y_a = copy.copy(np.array(yc_a))
+                        jac = ngmix.jacobian.Jacobian(row=  config['size_tile']/2.,
+                              col =  config['size_tile']/2.,
+                              dudrow=0.,
+                              dudcol=0.263,
+                              dvdrow=0.263,
+                              dvdcol=0.)
+
+                        v_cen, u_cen = jac.get_vu(row=config['size_tile']/2., col=config['size_tile']/2.)
+
+                        # apply WCS to get to world coords
+                        v, u = jac.get_vu(row=row_cen, col=col_cen)
+
+                        # unshear (subtract and then add the canonical center in u, v)
+                        u = np.atleast_1d(u) - u_cen
+                        v = np.atleast_1d(v) - v_cen
+
+                        #print (u,v)
+
+                        pos = np.vstack((u, v))
+
+                        out = np.dot(a, pos)
+                        assert out.shape[1] == u.shape[0]
+                        u_sheared = out[0, :] + u_cen
+                        v_sheared = out[1, :] + v_cen
+
+                        rows_sheared, cols_sheared = jac.get_rowcol(v=v_sheared, u=u_sheared)
+
+                        xc_a.append(rows_sheared[0])
+                        yc_a.append(cols_sheared[0])
+
+                    if ll == 0:
+                        x_a_p = (np.array(xc_a))
+                        y_a_p = (np.array(yc_a))                  
+                    elif ll == 1:
+                        x_a_m = (np.array(xc_a))
+                        y_a_m = (np.array(yc_a))
+
                     
 
     
@@ -296,6 +299,11 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
                     x_a = np.hstack([x_a,x_a+x_shifts])
                     y_a = np.hstack([y_a,y_a+y_shifts])
+                    if not do_templates:
+                        x_a_p = np.hstack([x_a_p,x_a_p+x_shifts])
+                        y_a_p = np.hstack([y_a_p,y_a_p+x_shifts])
+                        x_a_m = np.hstack([x_a_m,x_a_m+x_shifts])
+                        y_a_m = np.hstack([y_a_m,y_a_m+x_shifts])
             except:
                 pass
             # **************************************************
@@ -341,7 +349,13 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                         [0., 0.263]])
                     wcs_ = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
 
-                    
+                    if not do_templates:
+                        cent=(y_a_p[real],x_a_p[real])
+                        wcs_p = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)    
+                        cent=(y_a_m[real],x_a_m[real])
+                        wcs_m = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)    
+                                      
+                        
                     # choose galaxy model *****************
                     redoit = True
                     count_repeat = 0 
@@ -403,8 +417,11 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                             gp[2] = copy.copy(mm1)
                             gp[3] = copy.copy(mm2)
 
-                            galaxy_info[b] = {'gal_p':gp,'psf_p':psfp,'wcs':wcs_,'p0':p0, 'p0_PSF':p0_PSF}
-
+                            if not do_templates:
+                                galaxy_info[b] = {'gal_p':gp,'psf_p':psfp,'wcs':wcs_,'wcs_m':wcs_m,'wcs_p':wcs_p,'p0':p0, 'p0_PSF':p0_PSF,'x_a_p':x_a_p[real],'y_a_p':y_a_p[real],'x_a_m':x_a_m[real],'y_a_m':y_a_m[real]}
+                                
+                            else:
+                                galaxy_info[b] = {'gal_p':gp,'psf_p':psfp,'wcs':wcs_,'p0':p0, 'p0_PSF':p0_PSF,'x_a':x_a[real],'y_a':y_a[real]}
                             
                             if verbose:
                                 print ('pre rendering')
@@ -412,8 +429,8 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                 mute_p,simulated_psf,jac = render_gal(gp,psfp,wcs_,config['size_tile'], g1 = 0., g2 = 0.,return_PSF=True)
                                 mute_m = 1.
                             else:
-                                mute_p,simulated_psf,jac = render_gal(gp,psfp,wcs_,config['size_tile'], g1 = config['g1'][0], g2 = config['g2'][0],return_PSF=True)
-                                mute_m,jac = render_gal(gp,psfp,wcs_,config['size_tile'],  g1 = config['g1'][1], g2 = config['g2'][1])
+                                mute_p,simulated_psf,jac = render_gal(gp,psfp,wcs_p,config['size_tile'], g1 = config['g1'][0], g2 = config['g2'][0],return_PSF=True)
+                                mute_m,jac = render_gal(gp,psfp,wcs_m,config['size_tile'],  g1 = config['g1'][1], g2 = config['g2'][1])
                                 
                                                     
                             if verbose:
@@ -433,8 +450,9 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     rendering = False
                                     print ('model rendering failes somehow')
                         if sv:
-                            Input_catalog[y_a[real],x_a[real]] = galaxy_info    
+                            Input_catalog[real] = galaxy_info    
                 #except:
+                
                 #    if (gp[4]> config['size_treshold']):
                 #        pass
                 #    else:
@@ -602,7 +620,20 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             #                  MEASURE  MOMENTS                     #
             #********************************************************
             
-            ll = np.array(list(Input_catalog.keys()))
+            imc_keys = np.array(list(Input_catalog.keys()))
+            
+            def get_coordinates(Input_catalog,im_type):
+                ll = []
+                for rel in Input_catalog.keys():
+                    if im_type == 'image_p':
+                        ll.append([Input_catalog[rel][b]['y_a_p'],Input_catalog[rel][b]['x_a_p']])
+                    elif im_type == 'image_m':
+                        ll.append([Input_catalog[rel][b]['y_a_m'],Input_catalog[rel][b]['x_a_m']])
+                    elif im_type == 'image_n':
+                        ll.append([Input_catalog[rel][b]['y_a'],Input_catalog[rel][b]['x_a']])
+                return np.array(ll)
+                
+                
 
 
             if do_templates:
@@ -615,6 +646,9 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             # we want to measure moments at the location of the detctions for Poisson-like sims, or at the injection coordinates for stamp-like sims.
             final_coordinates= dict()
             for im_type in loop_keys:
+                
+                ll = get_coordinates(Input_catalog,im_type)
+                
                 if config['mode_detection'] == 'detection':
                     extra_obj_data_fields = [('number', 'i8'),]
                     obj_data = meds.util.get_meds_input_struct(len(detection_cat[config['bands'][0]][im_type]['x']), extra_fields=extra_obj_data_fields)
@@ -635,14 +669,22 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                 if config['mode_detection'] == 'detection':
                     indexes_final = np.array(detection_cat[config['bands'][0]][im_type]['x'] == detection_cat[config['bands'][0]][im_type]['x'])
                 else:
-                    indexes_final = np.array(list(Input_catalog.keys()))[:,0] == np.array(list(Input_catalog.keys()))[:,0]
+                    ll = get_coordinates(Input_catalog,im_type)
+                    indexes_final = np.array(list(Input_catalog.keys()))[:] == np.array(list(Input_catalog.keys()))[:]
+                    #print (indexes_final)
+                    #indexes_final = np.array(list(Input_catalog.keys()))[:,0] == np.array(list(Input_catalog.keys()))[:,0]
+               
                
             
-                if do_templates: #MG: YOU WANT TO CHANGE THIS ALSO FOR TARGETS I'D SAY -----
+                #if do_templates: #MG: YOU WANT TO CHANGE THIS ALSO FOR TARGETS I'D SAY -----
+                if 1==1:
                     if config['mode_detection'] == 'input':
-                        ll = np.array(list(Input_catalog.keys()))
+                        ll = get_coordinates(Input_catalog,im_type)
+                        #print (ll.shape)
                         x = ll[:,0]
                         y = ll[:,1]
+                        
+                 
 
                     if config['mode_detection'] == 'detection':
                         x = detection_cat[config['bands'][0]][im_type]['x']
@@ -681,10 +723,11 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         if count_t>100:
                             print ('stuck')
 
+                
                     final_coordinates[im_type] = [x,y]
 
 
-
+                #print ('final coordinates: ',len(np.arange(len_loop)[indexes_final]))
                 # measurement loop ******************************************************************************
                 templates_id = []
              
@@ -726,13 +769,24 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     catalog = SkyCoord(ra=ll[:,0]*uu.degree*0.263/60., dec=ll[:,1]*uu.degree*0.263/60.)  
                                     idx, d2d, d3d = goldcat.match_to_catalog_sky(catalog, nthneighbor=1) 
                                     dist_pix = np.sqrt((detection_cat[config['bands'][0]][im_type]['x'][ix]-ll[idx][0][0])**2+(detection_cat[config['bands'][0]][im_type]['y'][ix]-ll[idx][0][1])**2)
+                                    
 
                                     #print ('distance detection from nearest input ',dist_pix)
-                                    psf_p =  Input_catalog[(ll[np.int(idx)][0],ll[np.int(idx)][1])][band]['psf_p']
-                                    gal_p =  Input_catalog[(ll[np.int(idx)][0],ll[np.int(idx)][1])][band]['gal_p']
-                                    wcs_ = copy.copy(Input_catalog[(ll[np.int(idx)][0],ll[np.int(idx)][1])][band]['wcs'])
+                                    psf_p =  Input_catalog[imc_keys[np.int(idx)]][band]['psf_p']
+                                    gal_p =  Input_catalog[imc_keys[np.int(idx)]][band]['gal_p']
+                                    
+                                    # need to substitute xy0 with detection coordinates.
+                                    
+                                    cent=(detection_cat[config['bands'][0]][im_type]['x'][ix],detection_cat[config['bands'][0]][im_type]['y'][ix])
+                                    origin = (0.,0.)
+                                    duv_dxy = np.array([[0.263, 0.],
+                                                    [0., 0.263]])
+                                    wcs_ = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
+                                
+                                
+                                   # wcs_ = copy.copy(Input_catalog[imc_keys[np.int(idx)]][band]['wcs'])
                                     wcs_.xy0 = wcs_.xy0 - (np.arange(config['size_tile'])[maskx][0],np.arange(config['size_tile'])[masky][0])
-                                    p0 = Input_catalog[(ll[np.int(idx)][0],ll[np.int(idx)][1])][band]['p0']
+                                    p0 = Input_catalog[imc_keys[np.int(idx)]][band]['p0']
                                     
                                     # basically if the detection is too far away from the input object, we flag this as a spurious object
 
@@ -741,12 +795,21 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     masky = (np.arange(config['size_tile'])>=ll[ix][1]-20) & (np.arange(config['size_tile'])<ll[ix][1]-20+40) 
 
 
-                                    psf_p = Input_catalog[(ll[np.int(ix)][0],ll[np.int(ix)][1])][band]['psf_p']
-                                    gal_p = Input_catalog[(ll[np.int(ix)][0],ll[np.int(ix)][1])][band]['gal_p']
-                                    wcs_ = copy.copy(Input_catalog[(ll[np.int(ix)][0],ll[np.int(ix)][1])][band]['wcs'])
+                                    psf_p = Input_catalog[imc_keys[np.int(ix)]][band]['psf_p']
+                                    gal_p = Input_catalog[imc_keys[np.int(ix)]][band]['gal_p']
+                                    
+                                    if im_type == 'image_p':
+                                        wcs_ = copy.copy(Input_catalog[imc_keys[np.int(ix)]][band]['wcs_p'])
+                                    elif im_type == 'image_m':
+                                        wcs_ = copy.copy(Input_catalog[imc_keys[np.int(ix)]][band]['wcs_m'])                   
+                                    elif im_type == 'image_n':
+                                        wcs_ = copy.copy(Input_catalog[imc_keys[np.int(ix)]][band]['wcs'])      
+                                        
+                                    
+                                    
                                     wcs_.xy0 = wcs_.xy0 - (np.arange(config['size_tile'])[maskx][0],np.arange(config['size_tile'])[masky][0])
 
-                                    p0 = Input_catalog[(ll[np.int(ix)][0],ll[np.int(ix)][1])][band]['p0']
+                                    p0 = Input_catalog[imc_keys[np.int(ix)]][band]['p0']
 
 
                                 image_stamp = tile[band][im_type][masky,:][:,maskx]
@@ -776,20 +839,31 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                         beg += 6
                                     gm = ngmix.GMix(pars=pars)
                                     im0 = gm.make_image((config['size_tile'],config['size_tile']), jacobian=jac_shredder)
-                                    #debug_images['images_preshredding'].append(image_stamp)
+                                    if config['debug']:
+                                        debug_images['images_preshredding'].append(image_stamp)
                                     image_stamp = image_stamp-(shredder_cat[im_type]['models'][0]-im0)[masky,:][:,maskx]
-                                   # debug_images['images_aftershredding'].append(image_stamp)
+                                    
                                     end = timeit.default_timer()
                              
-                                
+
                                 # render galaxy and psf model *****
+                                cent=(image_stamp.shape[0]/2.,image_stamp.shape[0]/2.)
+                                origin = (0.,0.)
+                                duv_dxy = np.array([[0.263, 0.],
+                                                [0., 0.263]])
+                                wcs__ = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
+ 
+                                
                                 if do_templates:
-                                    _,  psf_image,jac = render_gal(gal_p,psf_p,wcs_,image_stamp.shape[0], g1 = 0., g2 = 0.,return_PSF=True)
+                                    _,  psf_image,jac = render_gal(gal_p,psf_p,wcs__,image_stamp.shape[0], g1 = 0., g2 = 0.,return_PSF=True)
                                 else:
-                                    _,  psf_image,jac = render_gal(gal_p,psf_p,wcs_,image_stamp.shape[0], g1 = config['g1'][0], g2 = config['g2'][0],return_PSF=True)
+                                    _,  psf_image,jac = render_gal(gal_p,psf_p,wcs__,image_stamp.shape[0], g1 = config['g1'][0], g2 = config['g2'][0],return_PSF=True)
 
                                 #print (image_stamp.shape,psf_image.shape)
-                              
+                                if config['debug']:
+                                    debug_images['images_aftershredding'].append(image_stamp)
+                                    debug_images['images_aftershredding'].append(psf_image)
+                                    debug_images['wcs_coordinates'].append(wcs_.xy0)
                                 
                                 #debug_images['images'].append(image_stamp)
                                 images_a.append(image_stamp)
@@ -804,6 +878,9 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                             xyshift, error,msg = mul.recenter()
                             moments = mul
                             
+                            mom = moments.get_moment(0,0)
+                            #if mom.even[0]< 1000:
+                            #    print ('Moments: ',ix,im_type, mom.even[0],wcs_.xy0,wcs__.xy0)
                             
                             mom,meb_= moments.get_moment(0,0,returnbands=True)
                             meb = np.array([m_.even for m_ in meb_])
@@ -838,9 +915,9 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
                             if do_templates:
                                 if config['mode_detection'] == 'detection':
-                                    Wide_g = Image(Input_catalog[(ll[np.int(idx)][0],ll[np.int(idx)][1])][band]['p0'], meds = [], bands = config['bands'])
+                                    Wide_g = Image(Input_catalog[imc_keys[np.int(ix)]][band]['p0'], meds = [], bands = config['bands'])
                                 else:
-                                    Wide_g = Image(Input_catalog[(ll[np.int(ix)][0],ll[np.int(ix)][1])][band]['p0'], meds = [], bands = config['bands'])
+                                    Wide_g = Image(Input_catalog[imc_keys[np.int(ix)]][band]['p0'], meds = [], bands = config['bands'])
 
 
                                 tab_detections.add_image(Wide_g)
@@ -855,13 +932,13 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     if dist_pix >3:
                                         tab_detections.images[ix_].p0 = -1.
                                     else:
-                                        tab_detections.images[ix_].p0 = Input_catalog[(ll[np.int(idx)][0],ll[np.int(idx)][1])][band]['p0']
-                                    tab_detections.images[ix_].p0_PSF = Input_catalog[(ll[np.int(idx)][0],ll[np.int(idx)][1])][band]['p0_PSF']
-                                    templates_id.append(Input_catalog[(ll[np.int(idx)][0],ll[np.int(idx)][1])][band]['p0'])
+                                        tab_detections.images[ix_].p0 = Input_catalog[imc_keys[np.int(ix)]][band]['p0']
+                                    tab_detections.images[ix_].p0_PSF = Input_catalog[imc_keys[np.int(ix)]][band]['p0_PSF']
+                                    templates_id.append(Input_catalog[imc_keys[np.int(ix)]][band]['p0'])
                                 if config['mode_detection'] == 'input':
-                                    tab_detections.images[ix_].p0 = Input_catalog[(ll[np.int(ix)][0],ll[np.int(ix)][1])][band]['p0']
-                                    tab_detections.images[ix_].p0_PSF = Input_catalog[(ll[np.int(ix)][0],ll[np.int(ix)][1])][band]['p0_PSF']
-                                    templates_id.append(Input_catalog[(ll[np.int(ix)][0],ll[np.int(ix)][1])][band]['p0'])
+                                    tab_detections.images[ix_].p0 = Input_catalog[imc_keys[np.int(ix)]][band]['p0']
+                                    tab_detections.images[ix_].p0_PSF = Input_catalog[imc_keys[np.int(ix)]][band]['p0_PSF']
+                                    templates_id.append(Input_catalog[imc_keys[np.int(ix)]][band]['p0'])
                                 ix_ += 1
 
 
@@ -958,8 +1035,8 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                     for band in config['bands']:
                         maskx = (np.arange(config['size_tile'])>=x_a_poisson_selection-20) & (np.arange(config['size_tile'])<x_a_poisson_selection-20+40)
                         masky = (np.arange(config['size_tile'])>=y_a_poisson_selection-20) & (np.arange(config['size_tile'])<y_a_poisson_selection-20+40)
-                        psf_p = Input_catalog[(ll[0][0],ll[0][1])][band]['psf_p']
-                        gal_p = Input_catalog[(ll[0][0],ll[0][1])][band]['gal_p']
+                        psf_p = Input_catalog[imc_keys[np.int(0)]][band]['psf_p']
+                        gal_p = Input_catalog[imc_keys[np.int(0)]][band]['gal_p']
 
                         
                         
@@ -974,7 +1051,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         
                         
                         
-                        p0 = Input_catalog[(ll[0][0],ll[0][1])][band]['p0']
+                        p0 = Input_catalog[imc_keys[np.int(0)]][band]['p0']
                         image_stamp = tile[band][im_type][masky,:][:,maskx]
                         if config['shredder']:
                             image_stamp = image_stamp-(shredder_cat[im_type]['models'][0])[masky,:][:,maskx]
@@ -994,6 +1071,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                     kds = bfd.multiImage(images_a, (0,0), psf_a, wcs_a, pixel_noiselist = noise_a, bandlist = bands_a ,pad_factor= config['pad_factor'])
                     wt = mc.KSigmaWeight(sigma = config['sigma']) 
                     mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = config['band_dict_code'])
+                    
                     #xyshift, error,msg = mul.recenter()
                     moments = mul
 
@@ -1124,9 +1202,13 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
             if config['debug']:
                 extra_info = dict()
-                extra_info['input_coordinates'] = [x_a,y_a]
-                extra_info['detected_coordinates'] = [detection_cat[config['bands'][0]]['image_p']['x'],detection_cat[config['bands'][0]]['image_p']['y']]
-                #extra_info['detected_coordinates_sel'] = [final_coordinates['image_p']]
+                extra_info['input_coordinates'] = [x_a,y_a,x_a_p,y_a_p,x_a_m,y_a_m]
+                try:
+                    extra_info['detected_coordinates'] = [detection_cat[config['bands'][0]]['image_p']['x'],detection_cat[config['bands'][0]]['image_p']['y'],detection_cat[config['bands'][0]]['image_m']['x'],detection_cat[config['bands'][0]]['image_m']['y']]
+                    extra_info['detected_coordinates_sel'] = [final_coordinates['image_p'],final_coordinates['image_m']]
+                except:
+                    pass
+                
                 extra_info['noiseless tile'] = [tile[b]['image_p']-tile[b]['noise']]
                 extra_info['tile'] = [tile[b]['image_p']]
                 np.save(config['output_folder']+'/targets/debug_images{0}'.format(ii_chunk),[debug_images,extra_info])
@@ -1138,10 +1220,23 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             path = config['output_folder']+'/templates/'+'/IS_templates__chunk_'+str(ii_chunk)
 
             if config['debug']:
+                '''
+                need to save:
+                - input coordinates
+                - sheared input coordinates
+                - detection list
+                - detection list after re-grouping things together
+                
+                '''
+                
                 extra_info = dict()
                 extra_info['input_coordinates'] = [x_a,y_a]
-                extra_info['detected_coordinates'] = [detection_cat[config['bands'][0]]['image_n']['x'],detection_cat[config['bands'][0]]['image_n']['y']]
-                extra_info['detected_coordinates_sel'] = [final_coordinates['image_n']]
+             
+                try:
+                    extra_info['detected_coordinates'] = [detection_cat[config['bands'][0]]['image_n']['x'],detection_cat[config['bands'][0]]['image_n']['y']]
+                    extra_info['detected_coordinates_sel'] = [final_coordinates['image_n']]
+                except:
+                    pass
                 extra_info['noiseless tile'] = [tile[b]['image_n']-tile[b]['noise']]
                 extra_info['tile'] = [tile[b]['image_n']]
                 np.save(config['output_folder']+'/templates/debug_images{0}'.format(ii_chunk),[debug_images,extra_info])
