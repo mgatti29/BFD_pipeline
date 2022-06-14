@@ -43,7 +43,7 @@ def BFD_pipeline(config):
         pass
     # add some options from general:
     
-    keys_add = ['n','sigma','band_dict','bands','MPI']
+    keys_add = ['n','sigma','band_dict','bands','MPI','pad_factor']
 
     for key in keys_add:
         #try:
