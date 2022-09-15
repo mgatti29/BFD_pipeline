@@ -51,6 +51,7 @@ def make_targets(output_folder,**config):
     if config['MPI']:
         from mpi4py import MPI 
     comm = MPI.COMM_WORLD
+    run_count =0
     if comm.rank==0:
         
         # the code needs to read in all the fits files, assign noisetiers, and save the final target file.

@@ -23,6 +23,7 @@ import math
 import time, sys
 import multiprocessing
 from functools import partial
+
 import sys         
 import copy
 from astropy import version 
@@ -355,9 +356,12 @@ def pipeline(config, dictionary_runs, count):
                 comm.Barrier() 
         else:
             if config['agents_chunk'] > 1:
+                
                 pool = multiprocessing.Pool(processes=config['agents_chunk'])
 
                 _ = pool.map(partial(f, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = copy.deepcopy(dictionary_runs[tile]), bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile), xlist)
+                
+                
             else:
                 for x in xlist:
                     f(x, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs, params_image_sims = params_image_sims,external=external,tile=tile)

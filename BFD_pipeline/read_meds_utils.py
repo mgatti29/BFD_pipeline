@@ -1649,8 +1649,9 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         
         
         # crazy enough this has to
+        k = 0
         for i in frogress.bar(range(len(self.templates))):
-            tmpl =self.templates[i]
+            tmpl =self.templates[k]
             # obtain moments and derivs
             m0 = tmpl.get_moment()
             m1_dg1 = tmpl.get_dg1()
@@ -1663,7 +1664,9 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
             m2_dmu_dg2 = tmpl.get_dmu_dg2()
             m2_dmu_dmu = tmpl.get_dmu_dmu()
             
-           
+            #insert
+            
+            #self.templates.insert(i,None)
             # append to each list, merging even and odd moments
             savemoments.append(np.append(m0.even,m0.odd))
             savemoments_dg1.append(np.append(m1_dg1.even,m1_dg1.odd))
@@ -1681,7 +1684,16 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
             p0.append(tmpl.p0)
             jSuppression.append(tmpl.jSuppression)
             #del tmpl
-            #gc.collect()
+            k +=1
+            maxa = 100000
+            if k>maxa:
+                k=0
+                self.templates = self.templates[maxa:]
+            #if i % 100000 == 0:
+             #   gc.collect()
+        del self.templates
+        gc.collect()
+        print ('done collecting')
         # Create the primary and table HDUs
         col1 = fits.Column(name="id",format="K",array=id)
         col2 = fits.Column(name="moments",format="7E",array=savemoments)
@@ -2100,3 +2112,75 @@ def set_noise(do_templates,config):
             noise_ext = config['noise_ext'][0]
             
     return noise_ext
+
+
+
+def select_obj(x,y,radius):
+    new_DV = np.vstack([x,y]).T
+    
+    mask = np.array([True]*len(x))
+    ipx_ref = np.arange(len(mask))
+        
+    
+    r = len(mask[mask])
+    redoit = True
+    
+    # this removes objects too close ++++++++++++
+    while redoit:
+        mask_w_dummy = copy.deepcopy(mask)
+        
+        YourTreeName = scipy.spatial.cKDTree(new_DV[mask_w_dummy], leafsize=100)
+        
+        d,ipx__ = YourTreeName.query(new_DV[mask_w_dummy], k=2, distance_upper_bound=radius)
+
+        ipx_ = []
+        for dd in ipx__:
+            ipx_.append(np.sort(dd))
+        ipx_ = np.array(ipx_)
+        
+        
+        a = np.zeros((ipx_ref.shape[0]))
+        ipx_ref_ = ipx_ref[mask_w_dummy]
+        
+
+        u_ = (ipx_[ipx_[:,1]<len(mask[mask_w_dummy])])
+    
+        for ii in frogress.bar(range(len(u_))):
+            ipx = u_[ii]
+            
+            #print (ipx,a[ipx_ref[mask_w_dummy][ipx[0]]])
+            
+            if (a[ipx_ref_[ipx[0]]] ==0) and (a[ipx_ref_[ipx[1]]] == 0): 
+                mask[ipx_ref[mask_w_dummy][ipx[1]]] = False
+                # remove obj list
+                a[ipx_ref_[ipx[0]]] = 1
+                a[ipx_ref_[ipx[1]]] = 1
+
+        if r == len(mask[mask]):
+            redoit = False
+        r = len(mask[mask])
+   
+    # sometimes, removed objects are too many. ++++++++++++
+    #print (new_DV[mask,:])
+    ipx_ref_ = ipx_ref[~mask_w_dummy]
+    add_ = new_DV[~mask_w_dummy,:]
+    removed_excess = 0
+
+    for i in frogress.bar(range(add_.shape[0])):
+        YourTreeName = scipy.spatial.cKDTree(new_DV[mask], leafsize=100) 
+        d,ipx_ = YourTreeName.query(add_[i].reshape(1,-1), k=1, distance_upper_bound=10*radius)
+  
+
+
+        if d>radius:
+            #print ('put back: ',x[ipx_ref_[i]])
+            #print (x[ipx_ref_[i]])
+            mask[ipx_ref_[i]] = True
+            removed_excess +=1
+
+            
+    #print ('')
+   # print('removed excess ',removed_excess)
+
+    return mask
+ 

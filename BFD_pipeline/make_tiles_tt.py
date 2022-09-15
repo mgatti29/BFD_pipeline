@@ -2,7 +2,7 @@ from bfd import momentcalc as mc
 from bfd.momenttable import TemplateTable, TargetTable
 from ngmix.jacobian import Jacobian
 import os, sys
-from .read_meds_utils import Image, MOF_table, DetectionsTable,render_gal,_add_T_and_scale,save_,get_box_sizes,get_sigma_size,_make_image,initialise_entries,set_noise,setup_templates_table
+from .read_meds_utils import Image, MOF_table, DetectionsTable,render_gal,_add_T_and_scale,save_,get_box_sizes,get_sigma_size,_make_image,initialise_entries,set_noise,setup_templates_table,select_obj
 import copy
 from astropy import units as uu
 from astropy.coordinates import SkyCoord
@@ -159,7 +159,41 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             
             # shear positions (only for targets, templates are not sheared!) **************
             
-            
+            # INJECT BLENDS ***********************************
+            # This part artificially adds blens to the tile.
+            #try:
+ 
+            if config['injecting_blends']:
+                try:
+                    if len(config['distance_blends']) ==2:
+                        
+                        x_shifts = np.random.randint(config['distance_blends'][0]/0.263,config['distance_blends'][-1]/0.263,len(x_a))
+                        y_shifts = np.random.randint(config['distance_blends'][0]/0.263,config['distance_blends'][-1]/0.263,len(x_a))
+                        
+                        x_a = np.hstack([x_a,x_a+x_shifts])
+                        y_a = np.hstack([y_a,y_a+y_shifts])
+                        
+                        print ('shifted')
+                        
+                except:
+                    theta =  np.radians(np.random.randint(0,36000,len(x_a))*1./100.)
+                
+                    #theta =  np.radians(np.random.randint(0,10,len(x_a))*36.)
+                    cos2angle = np.cos(theta)
+                    sin2angle = np.sin(theta)
+
+                    x_shifts = config['distance_blends']/0.263*cos2angle
+                    y_shifts = config['distance_blends']/0.263*sin2angle
+
+                    x_a = np.hstack([x_a,x_a+x_shifts])
+                    y_a = np.hstack([y_a,y_a+y_shifts])
+                        
+            #except:
+            #    pass
+     
+            # **************************************************
+        
+        
             if verbose:
                 print ('shear positions')
 
@@ -285,28 +319,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             '''
             
             
-            # INJECT BLENDS ***********************************
-            # This part artificially adds blens to the tile.
-            try:
-                if conf['injecting_blends']:
-                    print ('adding blends\n')
-                    theta =  np.radians(np.random.randint(0,36000,len(x_a))*1./100.)
-                    cos2angle = np.cos(theta)
-                    sin2angle = np.sin(theta)
 
-                    x_shifts = config['distance_blends']*0.263*cos2angle
-                    y_shifts = config['distance_blends']*0.263*sin2angle
-
-                    x_a = np.hstack([x_a,x_a+x_shifts])
-                    y_a = np.hstack([y_a,y_a+y_shifts])
-                    if not do_templates:
-                        x_a_p = np.hstack([x_a_p,x_a_p+x_shifts])
-                        y_a_p = np.hstack([y_a_p,y_a_p+x_shifts])
-                        x_a_m = np.hstack([x_a_m,x_a_m+x_shifts])
-                        y_a_m = np.hstack([y_a_m,y_a_m+x_shifts])
-            except:
-                pass
-            # **************************************************
     
             
             '''
@@ -379,7 +392,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                             
                             if (gp[4]> config['size_treshold']):
                                 #skipe this model because it's too big.
-                                skip_this_model+=1. 
+                                #skip_this_model+=1. 
                                 
                                 if b == 0:
                                     redoit= True
@@ -690,7 +703,24 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         x = detection_cat[config['bands'][0]][im_type]['x']
                         y = detection_cat[config['bands'][0]][im_type]['y']
 
+                    
+                    mask_too_close = select_obj(x,y,config['radius_blends_templates']/0.263)
+                    final_coordinates[im_type] = [x[mask_too_close],y[mask_too_close]]
+                    indexes_final[~mask_too_close] = False
+                    
+                    
+                    mask_too_close_= select_obj(x[mask_too_close],y[mask_too_close],config['radius_blends_templates']/0.263)
+                    #print ('')
+                    #print ([x,y])
+                    #print ([x[mask_too_close],y[mask_too_close]])
+                    #print ('checkremove: ',len(mask_too_close[~mask_too_close]))
+                    
+                    
+                    
+                    
+                    
                 
+                    '''
                     the_same = True
                     count_t = 0
                     while the_same:
@@ -726,7 +756,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                 
                     final_coordinates[im_type] = [x,y]
 
-
+                    '''
                 #print ('final coordinates: ',len(np.arange(len_loop)[indexes_final]))
                 # measurement loop ******************************************************************************
                 templates_id = []
@@ -1026,7 +1056,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
                 # measure the additional stamp for selection purposes [applies only if RANDOM + DETECTION + POISSON] **********************************
                 if ( (config['poisson']) & (config['mode_detection'] =='detection')):
-                    #print ('yessss')
+                    print ('EXTRA STAMP DIO CANE')
                     images_a = []
                     wcs_a = []
                     psf_a = []
@@ -1121,6 +1151,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
 
                         tab_targets.AREA.append(AREA)
+                        print ('ip, ' , AREA)
 
                         tab_targets.meb.append(meb[0,:]*0.)
                         try:
@@ -1154,6 +1185,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         tab_targets_m.ra_shift.append(newcent_shift[0])
                         tab_targets_m.dec_shift.append(newcent_shift[1])
                         tab_targets_m.AREA.append(AREA)
+                        print ('im, ' , AREA)
 
                         tab_targets_m.meb.append(meb[0,:]*0.)
                         try:
