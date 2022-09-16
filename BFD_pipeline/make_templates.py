@@ -505,7 +505,7 @@ def make_templates(output_folder,**config):
 
 
 
-        mask_w,w,even_new,odd_new = select_obj_w(new_DV_[mask,:],moments[mask,:],moments_odd[mask,:],config['sigma_group_templates'])  
+        mask_w,w,even_new,odd_new = select_obj_w(new_DV_[mask,:],np.array(moments)[mask,:],np.array(moments_odd)[mask,:],config['sigma_group_templates'])  
         
         
         newweigths = np.zeros(len(mask))

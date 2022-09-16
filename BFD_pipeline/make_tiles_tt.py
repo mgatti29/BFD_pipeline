@@ -89,9 +89,9 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             
             
             
-
+        
         for rep in frogress.bar(range(replicas)):
-
+       
             if verbose:
                 print ('rep #',rep)
             # set the noise ************************************************************
@@ -1056,7 +1056,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
                 # measure the additional stamp for selection purposes [applies only if RANDOM + DETECTION + POISSON] **********************************
                 if ( (config['poisson']) & (config['mode_detection'] =='detection')):
-                    print ('EXTRA STAMP DIO CANE')
+                   
                     images_a = []
                     wcs_a = []
                     psf_a = []
@@ -1151,7 +1151,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
 
                         tab_targets.AREA.append(AREA)
-                        print ('ip, ' , AREA)
+                        #print ('ip, ' , AREA)
 
                         tab_targets.meb.append(meb[0,:]*0.)
                         try:
@@ -1185,7 +1185,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         tab_targets_m.ra_shift.append(newcent_shift[0])
                         tab_targets_m.dec_shift.append(newcent_shift[1])
                         tab_targets_m.AREA.append(AREA)
-                        print ('im, ' , AREA)
+                       # print ('im, ' , AREA)
 
                         tab_targets_m.meb.append(meb[0,:]*0.)
                         try:

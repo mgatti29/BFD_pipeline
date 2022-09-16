@@ -1,0 +1,280 @@
+#bfd to do:
+#- rerun a simulations with highsnr with stamps with 1 gal.
+#- rerun a simulation with highsnr with stamps with 10k gal.
+#- rerun a simulations with highsnr with stamps with 1 gal.
+#- rerun a simulation with highsnr with stamps with 10k gal.
+
+
+
+
+# for measuring targets ~ 1 hr
+#srun --nodes=10 --tasks-per-node=1 --cpus-per-task=64 --cpu-bind=cores --mem=110GB python run_pipeline.py config_data.yaml
+
+# for measuring templates ~ 1 hr
+#srun --nodes=6 --tasks-per-node=1 --cpus-per-task=60 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+
+# to make templates
+#srun --nodes=6 --tasks-per-node=16 --cpus-per-task=4 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py 
+#srun --nodes=6 --tasks-per-node=8 --cpus-per-task=8 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py 
+#srun --nodes=6 --tasks-per-node=4 --cpus-per-task=16 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py 
+
+
+
+
+
+
+#srun --nodes=5 --tasks-per-node=5 --cpus-per-task=12 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+#srun --nodes=5 --tasks-per-node=2 --cpus-per-task=30 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+#srun --nodes=5 --tasks-per-node=5 --cpus-per-task=12 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+## make targets - whatever is OK, no cost basically.
+#srun --nodes= 20 --tasks-per-node=1 --cpus-per-task=60 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+#measure moments deep field
+#srun --nodes=20 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+#make templates
+#srun --nodes=20 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+#srun --nodes=12 --tasks-per-node=2 --cpus-per-task=30 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+
+#srun --nodes=1 --tasks-per-node=1 --cpus-per-task=60 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+#srun --nodes=1 --tasks-per-node=5 --cpus-per-task=12 --cpu-bind=cores --mem=110GB python run_pipeline_cn.py
+
+
+
+
+run:
+     #- setup_image_sims
+     #- make_tiles_tt
+     #
+     - measure_moments_targets
+     #- make_targets
+     #- measure_moments_templates
+     #- make_templates
+     #- cpp_part
+     
+     
+##
+######################################################################
+#                       general config
+######################################################################
+
+
+
+#measure_moments_templates:
+#    # There are ~ 244 tiles in des y3 deep fields. it's all parallelised with MPI, running on each tile.
+#    # srun --nodes= 10 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline.py
+
+# run all cosmos; all cosmos with multiple bands; all cosmos with masks & radius;
+
+general:
+    #output_folder: '/global/cscratch1/sd/mgatti/BFD/runs_collab_meeting/tile_highsn_grid_10k_manytargets_nobig_turbPSF_1.1_1.5PSF_benchmark/'
+    output_folder: '/global/cscratch1/sd/mgatti/BFD/data_test'
+    n: 4.     # Default: 
+    sigma: 0.55  # Default: 0.5
+    band_dict: [['r',0.7],['i',0.2],['z',0.1]] #[['r',1.0]] #
+    bands: ['r', 'i', 'z'] #['r'] #
+    MPI: True
+    pad_factor: 4.
+######################################################################
+#                       setup_image_sims
+######################################################################
+
+setup_image_sims:
+    bands: ['r','i','z']
+    stage: 'save_galaxy_params'
+    MOF_table_path: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/mof/run-ugriz-mof02_marco.fits'
+        
+        
+######################################################################
+#                       make_tiles_tt
+######################################################################
+
+## MODE STAMP *****+
+#grid input  -> all 0s, you get a 1 sometimes if you get a NaN
+#grid detection -> all 0s, you get a 1 sometimes if you get a NaN and 1 if where there should be an input galaxy, there is nothing (ADD THIS) 
+#
+## MODE STAMP *****+
+#random input no poisson -> all 0s, you get a 1 sometimes if you get a NaN
+#random input poisson -> all 0s, you get a 1 sometimes if you get a NaN
+#random detection  no poisson -> all 0s, you get a 1 sometimes if you get a NaN and add 1 if there's nothing
+#random detection  poisson -> this is the real detection case.
+
+make_tiles_tt:    
+    do: ['templates'] #['targets','templates']
+    size_tile: 500
+    gal_per_tile: 20 # 40 is 12 gal /arcmin^2, 100 is 32       40./(420*420*0.25*0.25/3600.)
+    number_of_replicas: 10 ##1600 #3200 #400
+    n_targets: 20 #12800 #38400
+    n_templates: 10000
+    #models: '/project/projectdirs/des/BFD_Y6/bfd/Marco/chunk_10k_similarSN_deep_fields_bdf_models_wphotoz_PSF_fixed.npy'
+    #models: '/project/projectdirs/des/BFD_Y6/bfd/Marco//chunk_10k_similarSN_deep_fields_bdf_models_wphotoz_PSF_fixed.npy'
+    #models: '/project/projectdirs/des/BFD_Y6/bfd/Marco/all_100k.npy
+    noise_ext: [2.1,2.3]
+    noise_factor: 0.02
+    noise_ext_templates: [0.002]
+    grid_targets: True
+    grid_templates: True
+    poisson: False
+    mode_detection: 'input' #'detection' #'input'
+    index_P0_PSF: 'turb'
+    index_P0: False
+    noiseless: False
+    maskless: True
+    resize_sn: 1.
+    pad_factor: 4.
+    radius_blends_templates: 1. #arcsec.
+    size_treshold: 1.
+    g1: [0.02,-0.02]
+    g2: [0.,0.]
+        
+######################################################################
+#                       measure_moments_targets
+######################################################################
+
+measure_moments_targets:
+    # This first part parallelises (MPI) on tiles and it does 5x multiprocessing on chunk size.
+    # Usually 1 tile per node is enough.
+
+    path_data: '/global/cscratch1/sd/mgatti/BFD/data/'
+    
+   
+    tiles: ['DES0008-0041'] #,'DES0206-2415', 'DES0407-3249',  'DES0635-5705','DES0028-5914','DES0210-6122', 'DES0415-6539',  'DES2033-4331','DES0031-0041','DES0211-0915', 'DES0420-6039',  'DES2105-4623','DES0050-3249','DES0212-2541', 'DES0426-6039',  'DES2119-0124','DES0055-2124','DES0222-0207', 'DES0427-2124',  'DES2142-5831','DES0102-0207','DES0254+0126', 'DES0430-2415',  'DES2209-4748','DES0102-5622','DES0257-0707', 'DES0435-3706',  'DES2258-5831','DES0107-5748','DES0310-4831', 'DES0457-4414',  'DES2318-3957','DES0108-2249','DES0339-1624', 'DES0501-4414',  'DES2319-4331','DES0119-0124','DES0343-2415', 'DES0512-3914',  'DES2328-0041','DES0151-3123','DES0346-3206', 'DES0607-4831',  'DES2336-6456']
+
+
+
+    # It can be 'ALL', a random number of tiles (e.g., 20), or a list with the names of the tiles.
+    agents_chunk: 20 #25
+    chunk_size: 400 # 3000 #when external, use large number. 50k vs 200
+    max_target_per_tile: 100000 #32000 #32000 # 00 #     max_target_per_tile: 40000
+    MOF_subtraction: True
+    shredder: True
+    shredder_x: True
+    cut_psf : [False,25]
+    MPI_per_tile : False # speed up for testing on 1 TILE
+    minimum_number_of_bands : 3
+    interp_masking : False
+    frac_limit: 0.3 # limit for throwing away targets
+    COADD_only: False
+    run_mcal: False
+    debug: False
+    
+    
+
+    # simulate targets ******************************
+    #simulated_templates: '/project/projectdirs/des/BFD_Y6/bfd/Marco/chunk_10k_similarSN_deep_fields_bdf_models_wphotoz_PSF_fixed.npy'
+    simulated_templates: '/project/projectdirs/des/BFD_Y6/bfd/Marco/all_100k.npy'
+    setup_image_sims: False
+    external: False
+    external_path: False #'/global/cscratch1/sd/mgatti/Mass_Mapping/moments//T17_tests/BFD_source3_cat.npy'
+    noise_factor: 1. # 0.03 #. 0.06 #0.1 and index_P0,index_P0_PSF=40 for basic high SNR run.
+    noise_ext: [2.6,0.4,'GAUSS'] #2.6; 0.4
+    # is it feasible?
+    number_of_replicas: 1600 #800 #400   #300 # it generates 5x simulated targets from each stamp.  SET TO 1 FOR EXTERNAL DATA SETS.
+    g1: [0.02,-0.02]
+    g2: [0.,0.]
+    maskless: True
+    pad_factor: 5.
+    noiseless: False
+    #fix the galaxy & PSFfor all. I've set it to 40 in the past.
+    index_P0: False
+    index_P0_PSF: 'turb'
+    turb: [1.1,0.3]
+    index_fixed: False    
+    
+######################################################################
+#                       make_target
+######################################################################
+
+make_targets:
+    # we divide the targets into bins depending on the covariance of Mf.
+    # to compare with cov_mf take the power of two
+    #sigmaM_min: 4.632   #   150
+    #sigmaM_max: 7.8 # 15000
+    # additional cuts:
+    sn_min: 7.
+    sn_max: 30.
+    Mf_max: 90000
+    Mf_min: 0.
+
+######################################################################
+#                       measure_moments_templates
+######################################################################
+
+measure_moments_templates:
+    # There are ~ 244 tiles in des y3 deep fields. it's all parallelised with MPI, running on each tile.
+    # srun --nodes= 10 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline.py
+
+    
+    path_coadd_deepfields: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/'
+    deep_fields_catalog: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/y3_deep_fields.fits'
+    fields: ['COSMOS_UltraVISTA_Willv2'] # , 'SN-C3', 'SN-E2', 'SN-X3']
+    tiles: ['COSMOS_C01_r3764p01','COSMOS_C02_r3764p01','COSMOS_C03_r3764p01','COSMOS_C04_r3764p01','COSMOS_C05_r3764p01','COSMOS_C06_r3764p01','COSMOS_C07_r3764p01','COSMOS_C08_r3764p01','COSMOS_C09_r3764p01']
+ #'All' #['COSMOS_C32_r3764p01'] #'All' #COSMOS_C32_r3764p01
+    agents_chunk: 1
+    chunk_size: 2000 # with MOF subtraction you want 1 chunk per tile.
+    max_target_per_tile: 20000 # 00
+    MOF_subtraction: True
+    MOF_models: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/mof/run-ugriz-mof02.fits'
+    cut_psf : [False,25]
+    minimum_number_of_bands : 1 # set it to the max otherwise bias incoming! -- 
+    interp_masking : False
+    frac_limit: 0.3 # limit for throwing away targets
+    COADD_only: True
+    radius_blends_templates: 0.000001
+    debug: True
+
+
+    # image simlations setup ******
+   # simulated_templates: '/project/projectdirs/des/BFD_Y6/bfd/Marco/chunk_10k_similarSN_deep_fields_bdf_models_wphotoz_PSF_fixed.npy'
+    simulated_templates: '/project/projectdirs/des/BFD_Y6/bfd/Marco/all_100k.npy'
+    
+    setup_image_sims: False
+    number_of_replicas:   1 #do not change for templates
+    noise_factor: 1
+    noise_ext: 0.26
+    maskless: True
+    pad_factor: 5.
+    noiseless: False
+    index_P0: 40
+    index_P0_PSF: 'turb'
+    turb: [1.1,0.3]
+    index_fixed: False
+    ## you can't use it with multiple templates --
+######################################################################
+#                       make_templates
+######################################################################
+
+make_templates:
+    sigma_max: 6.5 # we only keep templates within sigma_max (chi2 includes MX,MY,Mf,det supression)
+    sigma_step: 1.2 #maximum shift between template
+    xy_max: 2         
+    sn_min: 0 # minimum S/N on flux
+    chunks: 5 # It makes templates from #obj tile /chunks deep fields galaxies at a time
+    sn_max: 50000000000 # properties of the templates!!
+    Mf_max: 900000 # properties of the templates!!
+    Mf_min: 0.    # properties of the templates!!
+    #stage: ['compute','assembly'] #['compute','assembly']
+    #stage: ['compute','assembly'] #['compute','assembly']
+    downsample_factor: 0.4
+    correction_factor_selection: 57.42 # for the assembly, to get the selection right in the wide field.
+    stage: ['resume_templates'] #'resume_templates'] #'compute','assembly'] #'resume_templates'] #['compute','assembly']
+    
+    
+
+                                
+###############
+###############
+cpp_part:
+    chunks: 24
+    image_sims: True
+   #noise_tiers: 'All'  #[0,1,2,3,4,5,6,7,8,9,10] #[37,38,39,40,41,42,43] #[21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36] #,37,38,39,40,41,42,43,44] #[0,1,2,3,4,5,6] # ,7,8,9,10]
+    number_targets_chunk: 12000
+    add_labels: [''] #,'ISm_']
+    #noise_tiers: [5]
+    #stage: ['assemble','compute_m'] #,'assemble','compute_m'] #['split','integrate','assemble','selection']
+    
+    #stage: ['assemble','compute_m'] #,'compute_m'] #['split','integrate','assemble','selection']
+    #stage: ['selection'] #,'split','integrate','assemble','compute_m'] #,'compute_m']
+    #stage: ['assemble'] #,'split'] #,'split','integrate','assemble','compute_m']
+    #
+    stage: ['selection','selection_ave','split','integrate','assemble'] #,'split','integrate','assemble']
+    #stage: ['split','integrate','assemble']
+    

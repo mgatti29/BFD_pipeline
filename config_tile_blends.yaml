@@ -1,0 +1,228 @@
+###################################################
+# Recommended options to run this at nersc .
+##################################################
+# make_tiles_tt
+# srun --nodes=10 --tasks-per-node=20 --cpus-per-task=3 --cpu-bind=cores --mem=110GB python run_pipeline.py config_tile_blends.yaml
+# make_targets:
+# srun --nodes=1 --tasks-per-node=1 --cpus-per-task=60 --cpu-bind=cores --mem=110GB python run_pipeline_3s.py
+# make_templates:
+# srun --nodes=20 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline_3s.py
+# cpp_part
+# srun --nodes=20 --tasks-per-node=2 --cpus-per-task=32 --cpu-bind=cores --mem=110GB python run_pipeline_3s.py
+##################################################
+# FLOW for simulations : make_tiles_tt - make_targets - make_templates - cpp_part
+# FLOW for data : measure_moments_targets - make_targets - measure_moments_templates - make_templates - cpp_part
+##################################################
+
+
+# srun --nodes=1 --tasks-per-node=1 --cpus-per-task=60 --cpu-bind=cores --mem=110GB python run_pipeline.py config_tile_blends.yaml
+run:
+     ##- setup_image_sims
+     - make_tiles_tt
+     ##- measure_moments_targets
+     #- make_targets
+     #- measure_moments_templates
+     #- make_templates
+     #- cpp_part
+##
+######################################################################
+#                       general config
+######################################################################
+
+
+general:
+    output_folder: '/global/cscratch1/sd/mgatti/BFD/tile_blends_reference'
+    # bfd settings ********
+    n: 4.     #Default:  4.
+    sigma: 0.55  # Default: 0.55
+    pad_factor: 4. # Default: 4.
+    # bands ***************
+    band_dict: [['r',1.0]] # for simlated tiles, please just use 1 band.
+    bands: ['r'] 
+    MPI: True
+    
+######################################################################
+#                       setup_image_sims
+######################################################################
+
+setup_image_sims:
+    # this module is to save galaxy models parameters into a format that can be read for this simulations.
+    # I did it once so no need to re-do it.
+    bands: ['r','i','z']
+    stage: 'save_galaxy_params'
+    MOF_table_path: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/mof/run-ugriz-mof02_marco.fits'
+        
+        
+######################################################################
+#                       make_tiles_tt
+######################################################################
+make_tiles_tt:
+    do: ['targets','templates']
+    size_tile: 300 #  number of pixels on a side. The normal pixel scale ->  1 pixel ~ 0.26 arcsec. Note that the most external 40 pixels are never used.
+    gal_per_tile: 80 #this is the number of injected galaxies per tile. The number of detected galaxies will depend on the noise level & detection step.
+    number_of_replicas: 30 # 70 # see below.
+    n_targets: 64000 #20000 # the *total* number of injected targets will be n_targets * number_of replicas. For templates number_of_replicas is ignored.  
+    n_templates: 50000 #5000
+    models: '/global/u2/m/mgatti/BFD_pipeline/data/all_100k_200_size.npy' # models used to inject galaxies.
+    size_treshold: 1. # exclude models too big (size bigger than 1. arcsec).
+    
+    # noise of targets & templates ********
+    noise_ext: [2.6,0.4,'GAUSS']
+    noise_ext_templates: [0.00026,0.0004,'GAUSS']
+    
+    # *******
+    grid_targets: False #choose True for stamp-like sims. False for Poisson-like sims.
+    grid_templates: False  #choose True for stamp-like sims. False for Poisson-like sims.
+    poisson: True # True or False depending whether is a Poisson-like sims or not
+    mode_detection: 'detection' #'detection' or 'input'. Use input for stamp-like sims, detection for Poisson-like sims.
+    injecting_blends: False
+    
+    
+    # psf settings ******
+    PSF_TYPE: 'turb'
+    turb: [1.1,0.3] #psf_fwhm =  config['turb'][0]+(np.random.random(1)*config['turb'][1])[0]
+
+    # ***********
+    noiseless: False #if True, tiles won't have noise.
+    maskless: True #if True, tiles won't have masks effects. [to be implemented]
+
+    ## 
+    radius_blends_templates: 2.0 # In arcsec. It groups templates together within X arcsec. It doesn't deblend /templates &targets) within that radius.
+    shredder: True # deblend neighbours ***
+    g1: [0.02,-0.02]
+    g2: [0.,0.]
+    debug: False # saves tiles & stamps images for debuggin.
+    
+    
+    
+######################################################################
+#                       measure_moments_targets
+######################################################################
+
+measure_moments_targets:
+    
+    # This first part parallelises (MPI) on tiles and it does 5x multiprocessing on chunk size.
+    # Usually 1 tile per node is enough.
+
+    path_data: '/global/cscratch1/sd/mgatti/BFD/data/'
+    tiles: ['DES2347-5414'] # It can be 'ALL', a random number of tiles (e.g., 20), or a list with the names of the tiles.
+    agents_chunk: 10
+    chunk_size: 100 #when external, use large number. 50k vs 200
+    max_target_per_tile: 32000 #32000 #32000 # 00 #     max_target_per_tile: 40000
+    MOF_subtraction: False
+    shredder: None #path for the MOF subtraction
+    cut_psf : [False,25]
+    MPI_per_tile : True # speed up for testing on 1 TILE
+    minimum_number_of_bands : 1
+    interp_masking : False
+    frac_limit: 0.3 # limit for throwing away targets
+    COADD_only: True
+    run_mcal: False
+    
+    
+
+    # simulate targets ******************************
+    #simulated_templates: '/project/projectdirs/des/BFD_Y6/bfd/Marco/chunk_10k_similarSN_deep_fields_bdf_models_wphotoz_PSF_fixed.npy'
+    simulated_templates: '/project/projectdirs/des/BFD_Y6/bfd/Marco/all_100k.npy'
+    setup_image_sims: True
+    external: False
+    external_path: '/global/cscratch1/sd/mgatti/Mass_Mapping/moments//T17_tests/BFD_source3_cat.npy'
+    noise_factor: 1. # 0.03 #. 0.06 #0.1 and index_P0,index_P0_PSF=40 for basic high SNR run.
+    noise_ext: [2.6,0.4,'GAUSS'] #2.6; 0.4
+    # is it feasible?
+    number_of_replicas: 1600 #800 #400   #300 # it generates 5x simulated targets from each stamp.  SET TO 1 FOR EXTERNAL DATA SETS.
+    g1: [0.02,-0.02]
+    g2: [0.,0.]
+    maskless: True
+    pad_factor: 5.
+    noiseless: False
+    #fix the galaxy & PSFfor all. I've set it to 40 in the past.
+    index_P0: False
+    index_P0_PSF: 'turb'
+    turb: [1.1,0.3]
+    index_fixed: 500    
+    
+######################################################################
+#                       make_target
+######################################################################
+
+make_targets:
+    # we divide the targets into bins depending on the covariance of Mf.
+    # to compare with cov_mf take the power of two
+    #sigmaM_min: 4.632   #   150
+    #sigmaM_max: 7.8 # 15000
+    # additional cuts:
+    sn_min: 7.
+    sn_max: 30.
+    Mf_max: 90000
+    Mf_min: 0.
+
+######################################################################
+#                       measure_moments_templates
+######################################################################
+
+measure_moments_templates:
+    # There are ~ 244 tiles in des y3 deep fields. it's all parallelised with MPI, running on each tile.
+    # srun --nodes= 10 --tasks-per-node=10 --cpus-per-task=6 --cpu-bind=cores --mem=110GB python run_pipeline.py
+
+
+    path_coadd_deepfields: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/'
+    deep_fields_catalog: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/y3_deep_fields.fits'
+    fields: ['COSMOS_UltraVISTA_Willv2'] # , 'SN-C3', 'SN-E2', 'SN-X3']
+    tiles: ['COSMOS_C32_r3764p01']
+    agents_chunk: 1
+    chunk_size: 10000
+    max_target_per_tile: 100000 # 00
+    MOF_subtraction: False
+    shredder: '/global/project/projectdirs/des/BFD_Y6/deep_fields_coadd/mof/run-ugriz-mof02.fits'
+    cut_psf : [False,25]
+    minimum_number_of_bands : 1 # set it to the max otherwise bias incoming! -- 
+    interp_masking : False
+    frac_limit: 0.3 # limit for throwing away targets
+    COADD_only: True
+
+    # image simlations setup ******
+   # simulated_templates: '/project/projectdirs/des/BFD_Y6/bfd/Marco/chunk_10k_similarSN_deep_fields_bdf_models_wphotoz_PSF_fixed.npy'
+    simulated_templates: '/project/projectdirs/des/BFD_Y6/bfd/Marco/all_100k.npy'
+    
+    setup_image_sims: True
+    number_of_replicas:   1 #do not change for templates
+    noise_factor: 1
+    noise_ext: 0.26
+    maskless: True
+    pad_factor: 5.
+    noiseless: False
+    index_P0: 40
+    index_P0_PSF: 'turb'
+    turb: [1.1,0.3]
+    index_fixed: 500
+    ## you can't use it with multiple templates --
+######################################################################
+#                       make_templates
+######################################################################
+
+make_templates:
+    sigma_max: 6.5 # we only keep templates within sigma_max (chi2 includes MX,MY,Mf,det supression)
+    sigma_step: 1.2 #maximum shift between template
+    xy_max: 2         
+    sn_min: 0 # minimum S/N on flux
+    chunks: 5 # It makes templates from #obj tile /chunks deep fields galaxies at a time
+    sn_max: 50000000000 # properties of the templates!!
+    Mf_max: 900000 # properties of the templates!!
+    Mf_min: 0.    # properties of the templates!!
+    sigma_group_templates: 0.5
+    stage: ['resume_templates','compute','assembly']  #'resume_templates',
+    
+
+                                
+###############
+cpp_part:
+    chunks: 40
+    image_sims: True
+    #noise_tiers: [13,14,15,16]
+    number_targets_chunk: 12000
+    add_labels: ['ISp_','ISm_'] 
+    
+    #stage: ['selection','selection_ave']
+    stage: ['split','integrate','assemble']
+    
