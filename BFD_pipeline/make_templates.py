@@ -37,8 +37,8 @@ from bfd import Moment
 
 def select_obj_w(new_DV,even,odd,radius):
     
-    even_new = np.zeros_like(even)
-    odd_new = np.zeros_like(odd)
+    even_new = copy.deepcopy(even)
+    odd_new =  copy.deepcopy(odd)
     
   
     mask = np.array([True]*new_DV.shape[0])
