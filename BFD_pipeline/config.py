@@ -12,7 +12,6 @@ from .measure_moments_targets import measure_moments_targets
 from .measure_moments_templates import measure_moments_templates
 from .make_targets import make_targets
 from .make_templates import make_templates
-from .setup_image_sims import setup_image_sims
 from .cpp_part_split import cpp_part
 from .make_tiles_tt import make_tiles_tt
 import copy
