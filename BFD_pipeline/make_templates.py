@@ -159,161 +159,192 @@ def angle(e):
 def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
    
         t_index, d_index = runs[index]
+        if not os.path.exists(output_folder+'/templates/templates_junk/templates_{0}_{1}.pkl'.format(t_index,d_index)):
 
-        try:
-            templates_overview = pf.open(output_folder+'/templates_overview.fits')
-            mfverview = templates_overview[1].data['moments'][:,0]
-            idverview = templates_overview[1].data['index']
-            wverview = templates_overview[1].data['w']
-            overview_data = True
-        except:
-            overview_data = False
-            pass
-        config['sigma_xy'] =   targets_properties[t_index]['sigma_xy']
-        config['sigma_flux'] = targets_properties[t_index]['sigma_flux']
-        
-        tab_templates = TemplateTable(n = config['n'],
-                        sigma =  config['sigma'],
-                        sn_min = config['sn_min'], 
-                        sigma_xy = config['sigma_xy'], 
-                        sigma_flux = config['sigma_flux'], 
-                        sigma_step = config['sigma_step'], 
-                        sigma_max = config['sigma_max'],
-                        xy_max = config['xy_max'])
+            try:
+            #if 1==1:
+                templates_overview = pf.open(output_folder+'/templates_overview.fits')
+                mfverview = templates_overview[1].data['moments'][:,0]
+                idverview = templates_overview[1].data['index_gal']
+                class_w = templates_overview[1].data['class']
+                wverview = templates_overview[1].data['w']
+                overview_data = True
+            except:
+                overview_data = False
+                
+            #    pass
+            config['sigma_xy'] =   targets_properties[t_index]['sigma_xy']
+            config['sigma_flux'] = targets_properties[t_index]['sigma_flux']
 
-
-        limits = {'SN_Mf_min': config['sn_min'],
-                  'SN_Mf_max': config['sn_max'],
-                  'Mf_max': config['Mf_max'],
-                  'Mf_min': config['Mf_min']}#targets_properties[t_index]['Mf_min']}
+            tab_templates = TemplateTable(n = config['n'],
+                            sigma =  config['sigma'],
+                            sn_min = config['sn_min'], 
+                            sigma_xy = config['sigma_xy'], 
+                            sigma_flux = config['sigma_flux'], 
+                            sigma_step = config['sigma_step'], 
+                            sigma_max = config['sigma_max'],
+                            xy_max = config['xy_max'])
 
 
-        print ('sigma_flux: ', config['sigma_flux'])
-        print ('sigma_XY: ', config['sigma_xy'])
-          
-            
-        #try:
-        if 1==1:
+            limits = {'SN_Mf_min': config['sn_min'],
+                      'SN_Mf_max': config['sn_max'],
+                      'Mf_max': config['Mf_max'],
+                      'Mf_min': config['Mf_min']}#targets_properties[t_index]['Mf_min']}
+
+
+            print ('sigma_flux: ', config['sigma_flux'])
+            print ('sigma_XY: ', config['sigma_xy'])
+
+
+            #try:
+
             try:
                 save_ = load_obj(output_folder+'/templates/'+'templates_'+d_index)
             except:
                 save_ = load_obj(output_folder+'/templates/'+'IS_templates_'+d_index)
-            
-            templates = []
-            count = 0
-            count_g = 0
-            print ('number of entries: ', len(save_.keys()))
-            
-            #for i in range(len(tab_mute.images)):
-            # downsample
-            
-            try:
-                
-                downsample_factor = config['downsample_factor']
-                downsample = np.int(len(save_.keys())*downsample_factor)
-            except:
-                downsample = len(save_.keys())
-                downsample_factor=1.
-            
+
+           # try:
+            cumulative_weight = 0
+            cumulative_weight1 = 0
+            if 1==1:
+                templates = []
+                count = 0
+                count_g = 0
+                print ('number of entries: ', len(save_.keys()))
+
+                #for i in range(len(tab_mute.images)):
+                # downsample
+
+                try:
+
+                    downsample_factor = config['downsample_factor']
+                    downsample = np.int(len(save_.keys())*downsample_factor)
+                except:
+                    downsample = len(save_.keys())
+                    downsample_factor=1.
+
+
+                for i_ in frogress.bar(range( np.int(len(save_.keys())*downsample_factor))):
+
+                        i = list(save_.keys())[i_]
+
+
+
+                        start = timeit.default_timer()
+                        #update_progress(1.*i/(len(tab_mute.images)),timeit.default_timer(),start)           
+                        cc = False
+
+                        try:
+                        #if 1==1:
+                            #mom = tab_mute.images[i].moments.get_moment(0.,0.)
+                            mom = save_[i]['moments'].get_moment(0.,0.)
+
+                            if overview_data:
+                                idx = np.in1d(idverview,save_[i]['index_gal'])
+                                #idx = np.in1d(mfverview,mom.even[mom.M0])
+                                #print ('--- idxx:',idverview[idx],save_[i]['index'])
+                                
+                                #print ('--- moments:',mom.even[mom.M0], templates_overview[1].data['moments'][idx,:][0])
+                                # this has to check aginst the index ---
+                                
+                                
+                                #print (wverview[idx],idverview[idx],i,save_[i]['index'])
+                                if wverview[idx]>0:
+                                    w_ = wverview[idx][0]
+                                    cc =True
     
-            for i_ in frogress.bar(range( np.int(len(save_.keys())*downsample_factor))):
-                    
-                    i = list(save_.keys())[i_]
-
-                    
-                    
-                    start = timeit.default_timer()
-                    #update_progress(1.*i/(len(tab_mute.images)),timeit.default_timer(),start)           
-                    cc = False
-     
-                    try:
-                    #if 1==1:
-                        #mom = tab_mute.images[i].moments.get_moment(0.,0.)
-                        mom = save_[i]['moments'].get_moment(0.,0.)
-
-                        if overview_data:
-                            idx = np.in1d(mfverview,mom.even[mom.M0])
-                            #print (wverview[idx],idverview[idx],i,save_[i]['index'])
-                            if wverview[idx]>0:
-                                w_ = wverview[idx]
-                                cc =True
-                                mom.even = templates_overview[1].data['average_moments'][idx,:]
-                                mom.odd = templates_overview[1].data['average_moments_odd'][idx,:]
-                                
-             
-         #∫ wverview
-                        else:
-                    
-                            w_ = 1.
-                            cc = True
-                    except:
-                    #    print ('not a valid measurement')
-                        pass
-                    if cc:
-                        #print (i)
-                        #mom = tab_mute.images[i].moments.get_moment(0.,0.)
-                        mom = save_[i]['moments'].get_moment(0.,0.)
-
-                        count_g +=1
-                        
-                        Mf = mom.even[mom.M0]
-                        SN_mute = Mf/np.sqrt(save_[i]['moments'].get_covariance()[0][mom.M0,mom.M0])
-              
-                        mask_bool = True
-
-
-          
-                        
-                        if limits['SN_Mf_min'] > SN_mute: 
-                            #print ('not passing SN min')
-                            mask_bool = False
-                        if limits['SN_Mf_max'] < SN_mute: 
-                            #print ('not passing SN maxx')
-                            mask_bool = False
-                        if limits['Mf_min'] > Mf: 
-                            #print ('not passing Mf_min')
-                            mask_bool = False
-                        if limits['Mf_max'] < Mf: 
-                            #print ('not passing Mf_max')
-                            mask_bool = False
-                        if mask_bool:
-                                
-                                #print (i)
-                                t = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
-                                ID_mute = copy.copy(save_[i]['index'])
-                                gc.collect()
-                                try:
-                                    p0 = save_[i]['p0']
-                                    p0_PSF = save_[i]['p0_PSF']
-                                               
-                                except:
+                                    mom.even = templates_overview[1].data['average_moments'][idx,:][0]
                                     
-                                    p0 = 0
-                                    p0_PSF = 0
-              
-                                if t[0] is None:
-                                    continue
-                                else:   
-                                    for tmpl in t:
-                                        count +=1
-                                        tmpl.p0 = p0
-                                        tmpl.p0_PSF = p0_PSF
-                                        tmpl.id = ID_mute
-                                        tmpl.nda *= w_/downsample_factor
-                                        templates.append(tmpl)
-                            #except:
-                            #        pass
-            
-            print ('templates: ',count, ' from galaxies: ', count_g,t_index, d_index)
-            save_obj(output_folder+'/templates/templates_junk/templates_{0}_{1}'.format(t_index,d_index),templates)
-            print ('saved',t_index, d_index)
-            #del template_list
-            del save_
-            gc.collect()
-        #except:
-        #    print ('problems with file ','(IS)_templates_'+d_index)
-        
+                                    mom.odd = templates_overview[1].data['average_moments_odd'][idx,:][0]
+                                else:
+                                    cc =False
 
+
+                        
+                            else:
+                                mom = save_[i]['moments'].get_moment(0.,0.)
+                                w_ = 1.
+                                cc = True
+                        except:
+                        #    print ('not a valid measurement')
+                            pass
+                        if cc:
+                            #print (i)
+                            #mom = tab_mute.images[i].moments.get_moment(0.,0.)
+                            #
+                            
+                            count_g +=1
+
+                            Mf = mom.even[mom.M0]
+                            #print ('Mf ', Mf)
+                            SN_mute = Mf/np.sqrt(save_[i]['moments'].get_covariance()[0][mom.M0,mom.M0])
+                            mask_bool = True
+
+
+                            if limits['SN_Mf_min'] > SN_mute: 
+                                #print ('not passing SN min')
+                                mask_bool = False
+                            if limits['SN_Mf_max'] < SN_mute: 
+                                #print ('not passing SN maxx')
+                                mask_bool = False
+                            if limits['Mf_min'] > Mf: 
+                                #print ('not passing Mf_min')
+                                mask_bool = False
+                            if limits['Mf_max'] < Mf: 
+                                #print ('not passing Mf_max')
+                                mask_bool = False
+                            if mask_bool:
+                                    cumulative_weight1 += w_ 
+                                    #print (i)
+                                    t = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
+                                    ID_mute = copy.copy(save_[i]['index'])
+                                    ID_gal = copy.copy(save_[i]['index_gal'])
+                                    
+                                    if overview_data:
+                                        class_ = class_w[idx]
+                                    else:
+                                        class_ = '-100_-100_-100'
+                                        
+                                    gc.collect()
+                                    try:
+                                        p0 = save_[i]['p0']
+                                        p0_PSF = save_[i]['p0_PSF']
+
+                                    except:
+
+                                        p0 = 0
+                                        p0_PSF = 0
+
+                                    if t[0] is None:
+                                        continue
+                                    else:   
+                                        for tmpl in t:
+                                            count +=1
+                                            tmpl.p0 = p0
+                                            tmpl.p0_PSF = p0_PSF
+                                            tmpl.id = ID_mute
+                                            tmpl.id_gal = ID_gal
+                                            tmpl.class_ = class_
+                                            tmpl.nda *= w_/downsample_factor
+                                            templates.append(tmpl)
+                                            #print ('---- w', tmpl.nda)
+                                            cumulative_weight +=  tmpl.nda
+                                #except:
+                                #        pass
+
+                                
+                #print ('cumulative weight: ' , cumulative_weight,cumulative_weight1)
+                #print ('templates: ',count, ' from galaxies: ', count_g,t_index, d_index)
+                save_obj(output_folder+'/templates/templates_junk/templates_{0}_{1}'.format(t_index,d_index),templates)
+               # print ('saved',t_index, d_index)
+                #del template_list
+                del save_
+                gc.collect()
+            #except:
+            #    print ('problems with file ','(IS)_templates_'+d_index)
+            #except:
+            #    print ('failed ',d_index)
+#
 
 
         
@@ -429,6 +460,7 @@ def make_templates(output_folder,**config):
         error = []
         #error_odd = []
         indexu = []
+        indexu_gal = []
         mof_index = []
         ra = []
         dec = []
@@ -452,6 +484,7 @@ def make_templates(output_folder,**config):
                     error.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
                     #error_odd.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
                     indexu.append(save_[index]['index'] )
+                    indexu_gal.append(save_[index]['index_gal'] )
 
                     try:
                         mof_index.append(save_[index]['MOF_index'] )
@@ -511,10 +544,56 @@ def make_templates(output_folder,**config):
         newweigths = np.zeros(len(mask))
         newweigths = w
         
-        print (len(newweigths[mask_w]),len(newweigths),np.sum(newweigths))
+   
+
+        # make classes ********************
+    
+
+        # Rotate all the templates:
+        phi = -0.5*(angle(moments[:,:].T))
+        e_,o_ = rotate(moments[:,:].T,moments[:,:2].T,phi)
+        new_DV = np.hstack([e_,o_])
+        # load noisetiers ------
+        nt = pf.open(output_folder+'/noisetiers.fits')
 
 
+        #cholesky decomposition of the worst tier
+        u,o = bulkUnpack(nt[-1].data['COVARIANCE'][:,:])
+        u[-1],o[-1]
+        new_cov = np.zeros((7,7))
+        new_cov[:5,:5] = u[1]
+        new_cov[5:,5:] = o[1]                  
+
+        L = np.linalg.cholesky(np.linalg.inv(new_cov))
+
+        # project the DV
+        new_DV_ = np.matmul(new_DV,L)
+        #
+        mask = np.array([True,True,True,False,False,False,False])
+        new_DV_ = new_DV_[:,mask]
+
+        # create classes for templates ************
+        bins_ = np.exp(np.linspace(0,7,config['classes']))
+        bins_[0] = -100
+        class_t= np.digitize(new_DV_,bins_)
                     
+        #class_t = (new_DV_/config['classes']).astype(np.int)
+        class_ = np.array(['{0}_{1}_{2}'.format(x[0],x[1],x[2]) for x in class_t])
+
+        #typical SN of the wide field galaxies of these templates ********************
+        # a upper cut on sn must be based on the worst tier. a lowe cut on sn must be based on worst tier.
+
+        # lower cut **
+        u,o = bulkUnpack(nt[1].data['COVARIANCE'][:,:])
+        mask_l = moments[:,0]/np.sqrt(u[1,0,0]) > 2 
+
+        # upper cut **
+        u,o = bulkUnpack(nt[-1].data['COVARIANCE'][:,:])
+        mask_u = moments[:,0]/np.sqrt(u[1,0,0]) < 70
+
+        mask_total = mask_u & mask_l & (w>0)
+        class_[~mask_total] = '-100_-100_-100'
+
                     
                     
                     
@@ -523,7 +602,9 @@ def make_templates(output_folder,**config):
         modified save function for moments with different sigma_Mf entries
         '''
         col=[]
+        
         col.append(fits.Column(name="index",format="K",array=np.array(indexu)))
+        col.append(fits.Column(name="index_gal",format="K",array=np.array(indexu_gal)))
         
         
         col.append(fits.Column(name="moments",format="5E",array=np.array(moments)))
@@ -557,6 +638,8 @@ def make_templates(output_folder,**config):
             
         except:
             pass
+        
+        col.append(fits.Column(name="class",format="128A",array=np.array(class_)))
         tbhdu = fits.BinTableHDU.from_columns(col)
         prihdu = fits.PrimaryHDU()
         thdulist = fits.HDUList([prihdu,tbhdu])

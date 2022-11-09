@@ -251,6 +251,7 @@ def pipeline(config, dictionary_runs, count):
                 comm.bcast(run_count,root = 0)
                 comm.Barrier() 
         else:
+            
             pool = multiprocessing.Pool(processes=config['agents_chunk'])
 
             _ = pool.map(partial(f, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections = tab_detections, m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external), xlist)

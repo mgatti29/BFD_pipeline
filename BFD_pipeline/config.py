@@ -13,7 +13,7 @@ from .measure_moments_templates import measure_moments_templates
 from .make_targets import make_targets
 from .make_templates import make_templates
 from .setup_image_sims import setup_image_sims
-from .cpp_part import cpp_part
+from .cpp_part_split import cpp_part
 from .make_tiles_tt import make_tiles_tt
 import copy
 
@@ -43,7 +43,7 @@ def BFD_pipeline(config):
         pass
     # add some options from general:
     
-    keys_add = ['n','sigma','band_dict','bands','MPI','pad_factor']
+    keys_add = ['n','sigma','band_dict','bands','MPI','pad_factor','classes']
 
     for key in keys_add:
         #try:

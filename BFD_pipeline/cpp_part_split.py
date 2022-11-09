@@ -37,6 +37,16 @@ def compute_g(p,q,r,mask = None):
     return g,g_err
 
 
+def find_close_neighbours(target_list,template_list):
+    list_ = []
+    for tu in template_list:
+        try:
+            distance = (np.sum((np.array([float(i) for i in tu.split('_')])-np.array([float(i) for i in target_list.split('_')]))**2))
+            if distance <=1:
+                list_.append(tu)
+        except:
+            pass
+    return list_
 
 def covariance_scalar_jck(TOTAL_PHI,jk_r, type_c = 'jackknife'):
     #  Covariance estimation
@@ -75,7 +85,7 @@ def define_jck_mask(length,n_jck):
 
 def cpp_part(output_folder,**config):
     config['output_folder'] = output_folder
-    chunks = config['chunks']
+
     if config['MPI']:
         from mpi4py import MPI 
     try: 
@@ -195,63 +205,142 @@ def cpp_part(output_folder,**config):
                 
                 
                 if 'split' in todos:
-                    print ('split *************')
-                    chunks = config['chunks']
+                    
+                    '''
+                    we do have to split targets & template by classes
+                    
+                    '''
+                    # read all the templates classes from templates overview -----
+                    templates_overview = pf.open(path_templates+'/templates_overview.fits')
+                    class_templates = templates_overview[1].data['class']
+                    types_templates = np.unique(class_templates[class_templates!='-100_-100_-100'])
+                   
+                    # read all the targets classes from the targets files --------
+                    class_targets = targets[1].data['class']
+                    types_targets = np.unique(class_targets[class_targets!='-100_-100_-100'])
+
+                    # produce the matching scheme --------------------------------
+                    list_templates = []
+                    for target_ in types_targets:
+                        list_templates.append(find_close_neighbours(target_,types_templates))
+                    
+                    
+                    print ('split targets *************')
                     # we're splitting the target file into chunks and then assemble it back ***
                     len_targets = len(targets[1].data['ID'])
-                    chunk_size = math.ceil(len_targets/chunks)
+                    chunks = len(types_targets)
                     targets_i = copy.copy(targets)
-                    #for i in range(chunks):
+  
                     run_count = 0
                     while run_count<chunks:
                         comm = MPI.COMM_WORLD
                         if run_count+comm.rank<chunks:
 
-                            start = (run_count+comm.rank)*chunk_size
-                            end = min([len_targets,(run_count+comm.rank+1)*chunk_size])
+                            
+                        
+                            mask_targets = class_targets == types_targets[run_count+comm.rank]
+                            n_batches = math.ceil(len(mask_targets[mask_targets])/config['bacth_size'])
+                            
+                            for n in range(n_batches):
+                                c = targets[1].columns
+                                cols = [] 
+                                for k in c:
+                                    try:
+                                        cols.append(pf.Column(name=k.name,format=k.format,array=(targets[1].data[k.name][mask_targets,:])[n*config['bacth_size']:(n+1)*config['bacth_size'],:]))
+                                    except:
+                                        cols.append(pf.Column(name=k.name,format=k.format,array=(targets[1].data[k.name][mask_targets])[n*config['bacth_size']:(n+1)*config['bacth_size']]))
 
-                            c = targets[1].columns
-                            cols = [] 
-                            for k in c:
+
+                                new_cols = pf.ColDefs(cols)
+                                hdu = pf.BinTableHDU.from_columns(new_cols)
+                                targets_i[1] = hdu
+                                targets_i[1].header[hdrkeys['weightN']] = targets[1].header[hdrkeys['weightN']]
+                                targets_i[1].header[hdrkeys['weightSigma']] = targets[1].header[hdrkeys['weightSigma']]
+
+
+                                # Next create an image of mean covariance matrix for each tier
+
+                                for tier in range(2,len(targets)):
+                                    data = copy.copy(targets[tier].data)
+                                    hdu = pf.ImageHDU(data)
+                                    hdu.header[hdrkeys['weightN']] =   targets[0].header[hdrkeys['weightN']]
+                                    hdu.header[hdrkeys['weightSigma']] = targets[0].header[hdrkeys['weightSigma']]
+                                    hdu.header['TIERNAME'] = targets[tier].header['TIERNAME']
+                                    hdu.header['TIERLOST'] = 0
+                                    # Record mean covariance of odd moments in header
+
+                                    hdu.header['COVMXMX'] = copy.copy(targets[tier].header['COVMXMX'])
+                                    hdu.header['COVMXMY'] = copy.copy(targets[tier].header['COVMXMY'])
+                                    hdu.header['COVMYMY'] = copy.copy(targets[tier].header['COVMYMY'])
+
+                                    targets_i[tier] = hdu
+
+
+                                # save the new target files ****
                                 try:
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end,:]))
+                                    targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}.fits'.format(add,run_count+comm.rank,n))
                                 except:
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end]))
-
-
-                            new_cols = pf.ColDefs(cols)
-                            hdu = pf.BinTableHDU.from_columns(new_cols)
-                            targets_i[1] = hdu
-                            targets_i[1].header[hdrkeys['weightN']] = targets[1].header[hdrkeys['weightN']]
-                            targets_i[1].header[hdrkeys['weightSigma']] = targets[1].header[hdrkeys['weightSigma']]
-
-
-                            # Next create an image of mean covariance matrix for each tier
-
-                            for tier in range(2,len(targets)):
-                                data = copy.copy(targets[tier].data)
-                                hdu = pf.ImageHDU(data)
-                                hdu.header[hdrkeys['weightN']] =   targets[0].header[hdrkeys['weightN']]
-                                hdu.header[hdrkeys['weightSigma']] = targets[0].header[hdrkeys['weightSigma']]
-                                hdu.header['TIERNAME'] = targets[tier].header['TIERNAME']
-                                hdu.header['TIERLOST'] = 0
-                                # Record mean covariance of odd moments in header
-                                
-                                hdu.header['COVMXMX'] = copy.copy(targets[tier].header['COVMXMX'])
-                                hdu.header['COVMXMY'] = copy.copy(targets[tier].header['COVMXMY'])
-                                hdu.header['COVMYMY'] = copy.copy(targets[tier].header['COVMYMY'])
-
-                                targets_i[tier] = hdu
+                                    try:
+                                        targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}.fits'.format(add,run_count+comm.rank,n),clobber = True)# 
+                                    except:
+                                        pass
 
                         
-                            # save the new target files ****
-                            try:
-                                targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank))
-                            except:
+                        run_count+=comm.size
+                        comm.bcast(run_count,root = 0)
+                        comm.Barrier() 
+                        
+                    # need to split all the templates accordingly now.....
+                    run_count = 0
+                    while run_count<chunks:
+                        comm = MPI.COMM_WORLD
+                        if run_count+comm.rank<chunks:
+
+                            # loop through all the templates files
+                            for u in range(len(noise_tiers)):
+                                
+                                templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[u])
+                                templates_ = pf.open(templatesfile)
+                                templates_i = copy.copy(templates_)
+                                mask = [c in list_templates[run_count+comm.rank]  for c in templates_[1].data['class']]
+                                
+                                
+                                c = templates_[1].columns
+                                cols = [] 
+                                for k in c:
+                                    try:
+                                        cols.append(pf.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][mask,:]))
+                                    except:
+                                        cols.append(pf.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][mask]))
+
+
+                                new_cols = pf.ColDefs(cols)
+                                hdu = pf.BinTableHDU.from_columns(new_cols)
+
+
+
+                                templates_i[1] = hdu
+                                templates_i[1].header[hdrkeys['weightN']] = templates_[1].header[hdrkeys['weightN']]
+                                templates_i[1].header[hdrkeys['weightSigma']] = templates_[1].header[hdrkeys['weightSigma']]
+
+                                templates_i[1].header['FLUX_MIN'] = templates_[1].header['FLUX_MIN']
+                                templates_i[1].header['SIG_XY'] = templates_[1].header['SIG_XY']
+                                templates_i[1].header['SIG_FLUX'] = templates_[1].header['SIG_FLUX']
+                                templates_i[1].header['SIG_STEP'] = templates_[1].header['SIG_STEP']
+                                templates_i[1].header['SIG_MAX'] = templates_[1].header['SIG_MAX']
+                                templates_i[1].header['EFFAREA'] = templates_[1].header['EFFAREA']
+                                templates_i[1].header['TIER_NUM'] = templates_[1].header['TIER_NUM']
+
+                                # save the new target files ****
                                 try:
-                                    targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank),clobber = True)# 
+                                    templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}_{2}.fits'.format(noise_tiers[u],add,run_count+comm.rank))
                                 except:
-                                    pass
+                                    try:
+                                        templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}_{2}.fits'.format(noise_tiers[u],add,run_count+comm.rank),clobber = True)# 
+                                    except:
+                                        pass
+
+                        
                         run_count+=comm.size
                         comm.bcast(run_count,root = 0)
                         comm.Barrier() 
@@ -259,26 +348,33 @@ def cpp_part(output_folder,**config):
                 if 'integrate' in todos:
                     print ('integrate *************')
                 
-                    
-                    # figure out how many runs to do:
-                    #chunks = 80
-                    chunks = config['chunks']
+                
+
                     run_count = 0
                     runs_to_do = dict()
 
-                    for  run_count in range(chunks):
-                        targetfile = output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count)
-                        targetfile_ = pf.open(targetfile)
-                        t_ = []
-                        try:
-                            for t in  np.array(targetfile_[1].header['HISTORY']):
-                                try:
-                                    t_.append(np.int((t.split('tier')[1]).split('from')[0]) )
-                                except:
-                                    pass
-                        except:
-                            pass
-                        runs_to_do[run_count] = noise_tiers[~np.in1d(noise_tiers,np.array(t_))]
+                    
+                    
+                   # read all the targets classes from the targets files --------
+                    class_targets = targets[1].data['class']
+                    types_targets = np.unique(class_targets[class_targets!='-100_-100_-100'])
+                    chunks = len(types_targets)
+                    
+
+                    
+                    #for  run_count in range(chunks):
+                    #    targetfile = output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count)
+                    #    targetfile_ = pf.open(targetfile)
+                    #    t_ = []
+                    #    try:
+                    #        for t in  np.array(targetfile_[1].header['HISTORY']):
+                    #            try:
+                    #                t_.append(np.int((t.split('tier')[1]).split('from')[0]) )
+                    #            except:
+                    #                pass
+                    #    except:
+                    #        pass
+                    #    runs_to_do[run_count] = noise_tiers[~np.in1d(noise_tiers,np.array(t_))]
 
 
                     
@@ -287,20 +383,41 @@ def cpp_part(output_folder,**config):
                     while run_count<chunks:
                         comm = MPI.COMM_WORLD
                         if run_count+comm.rank<chunks:
+                            
+                            #check the number of batches --------------
+                            mask_targets = class_targets == types_targets[run_count+comm.rank]
+                            n_batches = math.ceil(len(mask_targets[mask_targets])/config['bacth_size'])
 
-                            for u in range(len(noise_tiers)):
+                            # loop over batches and noise_tiers -------
+                            for n in range(n_batches):
                                 
-                                if noise_tiers[u] in runs_to_do[run_count+comm.rank]:
-                                    targetfile = output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank)
-                                    noistierfile = output_folder+'noisetiers.fits'
-                                    templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[u])
-
-                                    str_ = '/global/project/projectdirs/des/BFD_Y6/bfd/bin/tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2}'.format(targetfile,noistierfile,templatesfile)
-
+                                # check what has been run so far ------------
+                                targetfile_ = pf.open(output_folder+'/{0}targets_sample_g_{1}_{2}.fits'.format(add,run_count+comm.rank,n))
+                                t_ = []
+                                try:
+                                    for t in  np.array(targetfile_[1].header['HISTORY']):
+                                        try:
+                                            t_.append(np.int((t.split('tier')[1]).split('from')[0]) )
+                                        except:
+                                            pass
+                                except:
+                                    pass
+                                runs_to_do = noise_tiers[~np.in1d(noise_tiers,np.array(t_))]
                         
-                                    os.system(str_)
-                                #print('')
-                                #print (str_)
+                                for u in range(len(noise_tiers)):
+
+
+                                    if noise_tiers[u] in runs_to_do:
+                                        targetfile = output_folder+'/{0}targets_sample_g_{1}_{2}.fits'.format(add,run_count+comm.rank,n)
+                                        noistierfile = output_folder+'noisetiers.fits'
+                                        templatesfile = output_folder+'/templates_NOISETIER_{0}_{1}_{2}.fits'.format(noise_tiers[u],add,run_count+comm.rank)
+
+                                        str_ = '/global/project/projectdirs/des/BFD_Y6/bfd/bin/tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2}'.format(targetfile,noistierfile,templatesfile)
+
+
+                                        os.system(str_)
+                                    #print('')
+                                    #print (str_)
                                 
 
                         run_count+=comm.size
@@ -325,29 +442,60 @@ def cpp_part(output_folder,**config):
                             pqr = np.zeros((len_targets,6))
                             NUNIQUE = np.zeros(len_targets)
                             count =0
-                            for i in range(chunks):
+                            
+                            
+                            
+                            
+                            
+                            
+                         # read all the targets classes from the targets files --------
+                            class_targets = targets[1].data['class']
+                            types_targets = np.unique(class_targets[class_targets!='-100_-100_-100'])
+                            chunks = len(types_targets)
+                    
+
+                    
+                            for run_count in range(chunks):
+                    
                                 
-                                targets_i = pf.open(path_templates+'/{0}targets_sample_g_{1}.fits'.format(add,i))
-                                print (path_templates+'/{0}targets_sample_g_{1}.fits'.format(add,i))
-                                try:
-                                    NUNIQUE[count:count+len(targets_i[1].data['ID'])] = targets_i[1].data['NUNIQUE']
-                                    pqr[count:count+len(targets_i[1].data['ID']),:] = targets_i[1].data['PQR']
-                                    count+=len(targets_i[1].data['ID'])
-                                except:
-                                    NUNIQUE[count:count+len(targets_i[1].data['ID'])] = targets_i[1].data['NUNIQUE'][count:count+len(targets_i[1].data['ID']),:]
-                                    pqr[count:count+len(targets_i[1].data['ID']),:] = targets_i[1].data['PQR'][count:count+len(targets_i[1].data['ID']),:]
-                                    count+=len(targets_i[1].data['ID'])           
+                                #check the number of batches --------------
+                                mask_targets = class_targets == types_targets[run_count]
+                                n_batches = math.ceil(len(mask_targets[mask_targets])/config['bacth_size'])
+
+                                # loop over batches and noise_tiers -------
+                                for n in range(n_batches):
+
+                                    
+                                    
+                                    targetfile = output_folder+'/{0}targets_sample_g_{1}_{2}.fits'.format(add,run_count+comm.rank,n)
+                                    targets_i = pf.open(targetfile)
+                                    print (targetfile)
+                                        
+
+                                    # id matching
+                                    fix = np.arange(len(mask_targets))
+                                    fix = fix[mask_targets]
+                                    
+                                    fix = fix[n*config['bacth_size']:(n+1)*config['bacth_size']]
+                                    
+                                    mask = np.in1d(np.arange(len(mask_targets)),fix)
+                           
+                                    NUNIQUE[mask] = targets_i[1].data['NUNIQUE']
+                                    pqr[mask] = targets_i[1].data['PQR']
+                                   
+                                
+                                     
                             c = targets[1].columns
                             cols = [] 
-                            #if 1==1:
-                            try:
+                            if 1==1:
+                            #try:
                                 c['PQR'].array=pqr
-                            except:
-                                pass
-                            try:
-                                c['NUNIQUE'].array=NUNIQUE
-                            except:
-                                pass
+                            #except:
+                            #    pass
+                            #try:
+                            #    c['NUNIQUE'].array=NUNIQUE
+                            #except:
+                            #    pass
                             for k in c:
                                 if k.name == 'PQR':
                                     cols.append(pf.Column(name=k.name,format=k.format,array=pqr))
@@ -388,14 +536,15 @@ def cpp_part(output_folder,**config):
 
 
                             # save the new target files ****
+                            #if 1==1:
                             try:
-                                targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add,i))
+                                targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add))
                             except:
                                 try:
-                                    targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add,i),clobber = True)# 
+                                    targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add),clobber = True)# 
                                 except:
                                     pass
-
+#
                 comm.bcast(run_count,root = 0)
                 comm.Barrier() 
 

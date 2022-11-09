@@ -6,6 +6,7 @@ from .read_meds_utils import Image, MOF_table, DetectionsTable,render_gal,_add_T
 import copy
 from astropy import units as uu
 from astropy.coordinates import SkyCoord
+
 import bfd
 import sxdes
 import numpy as np
@@ -23,7 +24,7 @@ import pytest
 import sxdes
 import galsim
 from bfd.momentcalc import MomentCovariance
-
+import timeit
 logger = logging.getLogger(__name__)
 
 
@@ -66,6 +67,12 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             debug_images['images_preshredding']= []
             debug_images['images']= []
         
+        try:
+            config['perfect_deblender']
+        except:
+            config['perfect_deblender'] = False
+            
+                                            
         # create 2 target tables to store coordinates/moments etc. 
         # we create 2(tab_targets & tab_targets_m) because we need a table for each of the positively/negatively sheared version of the simulated tiles.
   
@@ -463,7 +470,8 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     rendering = False
                                     print ('model rendering failes somehow')
                         if sv:
-                            Input_catalog[real] = galaxy_info    
+                            
+                             Input_catalog[real] = galaxy_info    
                 #except:
                 
                 #    if (gp[4]> config['size_treshold']):
@@ -500,10 +508,15 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
                 if not config['noiseless']:
                     if do_templates:
+                        tile[b]['image_n_noisefree'] = copy.deepcopy(tile[b]['image_n'])
                         tile[b]['image_n']+=tile[b]['noise']
+                        
                     else:
+                        tile[b]['image_p_noisefree'] = copy.deepcopy(tile[b]['image_p'])
+                        tile[b]['image_m_noisefree'] = copy.deepcopy(tile[b]['image_m'])
                         tile[b]['image_p']+=tile[b]['noise']
                         tile[b]['image_m']+=tile[b]['noise']
+
 
                             # apply mask
                 if not config['maskless']:
@@ -545,7 +558,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                     #********************************************************
                     
                     if config['shredder']:
-                        import timeit
+                        
                        #   print ('pre shredding')
                         st = timeit.default_timer()
                         shredder_cat = dict()
@@ -807,6 +820,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     
                                     # need to substitute xy0 with detection coordinates.
                                     
+                                    
                                     cent=(detection_cat[config['bands'][0]][im_type]['x'][ix],detection_cat[config['bands'][0]][im_type]['y'][ix])
                                     origin = (0.,0.)
                                     duv_dxy = np.array([[0.263, 0.],
@@ -869,9 +883,71 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                         beg += 6
                                     gm = ngmix.GMix(pars=pars)
                                     im0 = gm.make_image((config['size_tile'],config['size_tile']), jacobian=jac_shredder)
+                            
                                     if config['debug']:
                                         debug_images['images_preshredding'].append(image_stamp)
                                     image_stamp = image_stamp-(shredder_cat[im_type]['models'][0]-im0)[masky,:][:,maskx]
+                                    
+                                if (config['mode_detection'] == 'detection') and (config['perfect_deblender']):
+                                    
+                                    
+                                    
+                                    # try to add the extact deblender ++++++++++
+                                    min_scale = max([0.5,config['radius_blends_templates']])
+                                    # cut the noise free models according to the stamp position--
+                                    models_ = tile[b][im_type+'_noisefree'][masky,:][:,maskx]
+                                    x_t = detection_cat[config['bands'][0]][im_type]['x'][ix]
+                                    y_t = detection_cat[config['bands'][0]][im_type]['y'][ix]
+                                    
+                            
+                                    count_blends = 0
+                                    for rel in Input_catalog.keys():
+                                        if im_type == 'image_p':
+                                            xm, ym = Input_catalog[rel][b]['y_a_p'],Input_catalog[rel][b]['x_a_p']
+                                        elif im_type == 'image_m':
+                                            xm, ym = Input_catalog[rel][b]['y_a_m'],Input_catalog[rel][b]['x_a_m']
+                                        elif im_type == 'image_n':
+                                            xm, ym = Input_catalog[rel][b]['y_a'],Input_catalog[rel][b]['x_a']
+                                        
+                                        # check if coordinates are within the minimum radius to the detection: ++++++
+                                        dxt = (xm-x_t)
+                                        dyt = (ym-y_t)
+                                        d_ = np.sqrt(dxt**2 +dyt**2)*0.263
+                                        
+                                        
+                                        if d_ < min_scale:
+                                            
+        
+                                            if im_type == 'image_n':
+                                                wcs_f = Input_catalog[rel][b]['wcs']
+                    
+                                                #cent=(y_a_p[real],x_a_p[real])
+                                    
+                                                #cent=(detection_cat[config['bands'][0]][im_type]['x'][ix],detection_cat[config['bands'][0]][im_type]['y'][ix])
+                                
+                    
+                                                wcs_f.xy0 = np.array([xm, ym ]) - np.array([np.arange(config['size_tile'])[maskx][0],np.arange(config['size_tile'])[masky][0]])
+                                                model_,  _,jac = render_gal(Input_catalog[rel][b]['gal_p'],Input_catalog[rel][b]['psf_p'],wcs_f,image_stamp.shape[0], g1 = 0., g2 = 0.,return_PSF=True)
+                                            elif im_type == 'image_p':
+                                                wcs_f = Input_catalog[rel][b]['wcs_m']
+                                                wcs_f.xy0 =  np.array([xm, ym ]) - np.array([np.arange(config['size_tile'])[maskx][0],np.arange(config['size_tile'])[masky][0]])
+                                                model_,  _,jac = render_gal(Input_catalog[rel][b]['gal_p'],Input_catalog[rel][b]['psf_p'],wcs_f,image_stamp.shape[0], g1 = config['g1'][0], g2 = config['g2'][0],return_PSF=True)
+                                            elif im_type == 'image_m':
+                                                wcs_f = Input_catalog[rel][b]['wcs_p']
+                                                wcs_f.xy0 =  np.array([xm, ym ]) - np.array([np.arange(config['size_tile'])[maskx][0],np.arange(config['size_tile'])[masky][0]])
+                                                model_,  _,jac = render_gal(Input_catalog[rel][b]['gal_p'],Input_catalog[rel][b]['psf_p'],wcs_f,image_stamp.shape[0], g1 = config['g1'][1], g2 = config['g2'][1],return_PSF=True)
+                                            
+                                            models_ -= model_
+                                            count_blends +=1
+                                        #else:
+                                            
+                                            
+                             
+                                            
+                                    if config['debug']:
+                                        debug_images['images_preshredding'].append(image_stamp)
+                                    image_stamp = image_stamp-models_
+                                                                               
                                     
                                     end = timeit.default_timer()
                              
@@ -892,7 +968,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                 #print (image_stamp.shape,psf_image.shape)
                                 if config['debug']:
                                     debug_images['images_aftershredding'].append(image_stamp)
-                                    debug_images['images_aftershredding'].append(psf_image)
+                                    #debug_images['images_aftershredding'].append(psf_image)
                                     debug_images['wcs_coordinates'].append(wcs_.xy0)
                                 
                                 #debug_images['images'].append(image_stamp)
@@ -987,7 +1063,11 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                         tab_targets.ra_shift.append(newcent_shift[0])
                                         tab_targets.dec_shift.append(newcent_shift[1])
                                         tab_targets.AREA.append(0.)
-
+                                        
+                                        try:
+                                            tab_targets.is_it_a_blend.append(count_blends)
+                                        except:
+                                            pass
                                         #meb_ = np.array([m_.even for m_ in meb])
                                         tab_targets.meb.append(meb[0,:])
                                         try:
@@ -1031,6 +1111,10 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                         tab_targets_m.AREA.append(0.)
                                         try:
                                             tab_targets_m.true_fluxes.append(fluxes)
+                                        except:
+                                            pass
+                                        try:
+                                            tab_targets_m.is_it_a_blend.append(count_blends)
                                         except:
                                             pass
                                         Mf,Mr,M1,M2,_ = mul_PSF.get_moment(0.,0.).even
@@ -1156,6 +1240,10 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         tab_targets.meb.append(meb[0,:]*0.)
                         try:
                             tab_targets.true_fluxes.append(fluxes)
+                        except:
+                            pass
+                        try:
+                            tab_targets_m.is_it_a_blend.append(0)
                         except:
                             pass
                         Mf,Mr,M1,M2,_ = mul_PSF.get_moment(0.,0.).even
@@ -1300,6 +1388,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                     count +=1
                     save__[index] = dict()
                     save__[index]['moments'] = tab_detections.images[index].moments
+                    save__[index]['index_gal'] = int(ii_chunk*10000)+index#tab_detections.images[index].image_ID[0]
                     save__[index]['index'] = tab_detections.images[index].image_ID[0]
                     try:
                         save__[index]['MOF_index'] = tab_detections.images[index].MOF_index

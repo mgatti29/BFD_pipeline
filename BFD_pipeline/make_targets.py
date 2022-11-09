@@ -27,6 +27,9 @@ from astropy import version
 import astropy.io.fits as fits
 import frogress
 from bfd.keywords import *
+from bfd import TierCollection
+import numpy as np
+from bfd import Moment
 
 
 
@@ -37,6 +40,45 @@ make a code that assembles everything, then it must call the create_tiers from G
 python createTiers.py X.fits --snMin --snMax  --fluxMin --fluxMax
 
 '''
+
+
+def bulkUnpack(packed):
+        '''Convert an Nx15 packed 1d version of even matrix into Nx5x5 array'''
+        m = Moment()
+        out = np.zeros( (packed.shape[0],m.NE,m.NE), dtype=float)
+        
+        j=0
+        for i in range(m.NE):
+            nvals = m.NE - i
+            out[:,i,i:] = packed[:,j:j+nvals]
+            out[:,i:,i] = packed[:,j:j+nvals]
+            j += nvals
+            
+        odd = np.zeros( (packed.shape[0],m.NO, m.NO), dtype=float)
+        odd[:,m.MX, m.MX] = 0.5*(out[:,m.M0,m.MR]+out[:,m.M0,m.M1])
+        odd[:,m.MY, m.MY] = 0.5*(out[:,m.M0,m.MR]-out[:,m.M0,m.M1])
+        odd[:,m.MX, m.MY] =  0.5*out[:,m.M0,m.M2]
+        odd[:,m.MY, m.MX] =  0.5*out[:,m.M0,m.M2]
+            
+            
+        return out,odd
+    
+def rotate(e,o,phi):
+    '''Return Moment instance for this object rotated by angle phi radians
+    '''
+    e = copy.deepcopy(e)
+    o = copy.deepcopy(o)
+    #e = np.array(self.even)
+    z = (e[2] + 1j*e[3]) * np.exp(2j*phi)
+    e[2] = z.real
+    e[3] = z.imag
+    z = (o[0] + 1j*o[1]) * np.exp(1j*phi)
+    o = np.array([z.real,z.imag])
+    
+    return e.T,o.T
+
+def angle(e):
+    return np.arctan((e[3]/e[2]))
 
 def produce_sn(t):
     return t[1].data['moments'][:,0]/np.sqrt(t[1].data['covariance'][:,0])
@@ -221,17 +263,79 @@ def make_targets(output_folder,**config):
                     for key in n_.keys():
                         noise_tiers[n_[key]]=key
 
-                    # dismis stuff that doesn't pass the cuts ***********
+                    # dismiss stuff that doesn't pass the cuts ***********
                     
                     mask = (produce_sn(m_)>config['sn_min']) & (produce_sn(m_)< config['sn_max']) & (produce_mf(m_)>config['Mf_min']) & (produce_mf(m_)< config['Mf_max']) 
 
-                    hdu = pf.BinTableHDU.from_columns(m_[1].columns)
+
+                    
+                    
+
+                    # add class column for later **********************************
+                    # we want to use the worst noise tiers for this!!
+                    
+                    
+                    
+                    phi = -0.5*(angle(m_[1].data['moments'].T))
+                    e_,o_ = rotate(m_[1].data['moments'].T,m_[1].data['moments'][:,:2].T,phi)
+                    new_DV_targets = np.hstack([e_,o_])
+
+                    #cholesky decomposition of the best tier
+                    nt = pf.open(output_folder+'/noisetiers.fits')
+                    u,o = bulkUnpack(nt[-1].data['COVARIANCE'][:,:])
+                    u[-1],o[-1]
+                    new_cov = np.zeros((7,7))
+                    new_cov[:5,:5] = u[1]
+                    new_cov[5:,5:] = o[1]                  
+
+                    L = np.linalg.cholesky(np.linalg.inv(new_cov))
+
+                    # project the DV
+                    new_DV_targets = np.matmul(new_DV_targets,L)
+                    #
+                    mask__ = np.array([True,True,True,False,False,False,False])
+                    new_DV_targets = new_DV_targets[:,mask__]
+
+                    sn = produce_sn(m_)
+
+                    # a upper cut on sn must be based on the worst tier. a lowe cut on sn must be based on worst tier.
+                    u,o = bulkUnpack(nt[1].data['COVARIANCE'][:,:])
+                    mask_l = m_[1].data['moments'][:,0]/np.sqrt(u[1,0,0]) > 2 
+
+                    # upper cut **
+                    u,o = bulkUnpack(nt[-1].data['COVARIANCE'][:,:])
+                    mask_u = m_[1].data['moments'][:,0]/np.sqrt(u[1,0,0]) < 70
+
+                    mask_total = mask_u & mask_l
+
+                    #class_ = (new_DV_targets/config['classes']).astype(np.int)
+                    
+                    bins_ = np.exp(np.linspace(0,7,config['classes']))
+                    bins_[0] = -100
+                    class_ = np.digitize(new_DV_targets,bins_)
+
+                   
+                    
+                    
+                    class_u = np.array(['{0}_{1}_{2}'.format(x[0],x[1],x[2]) for x in class_])
+                    mask_total = mask_u & mask_l #  
+                    class_u[~mask_total] = '-100_-100_-100'
+               
+                    
+                
+                    # regroup classes - can't have a class with less than 10 % of the targets.
+                    
+                    try:
+                        cols_ = pf.Column(name="class",format="128A",array=class_u)
+                        hdu = pf.BinTableHDU.from_columns(m_[1].columns+cols_)
+                    except:
+                        hdu = pf.BinTableHDU.from_columns(m_[1].columns)
+                        hdu.data['class'] = class_u
                     hdu.data['NOISETIER'] = noise_tiers
                     
                     
-
-
-                    print (len(mask[mask]),len(mask))
+                    
+                    # ++++++++++++++
                     m__ = (~mask) & (hdu.data['AREA']==0)
                     hdu.data['AREA'][m__] = 1
 
@@ -295,13 +399,13 @@ def make_targets(output_folder,**config):
 
                         del hdu
                     # assign noisetiers -1
-                    print (np.unique(hdulist[1].data['NOISETIER']))
+     
                     mask = noise_tiers ==-1
                     if len(mask[mask])>0:
                         cvm = [hdulist[ii+2].data[0,0] for ii in range(len(hdulist)-2)]
                         ttu = np.array([hdulist[ii+2].header['TIERNAME'] for ii in range(len(hdulist)-2)])
                         hdulist[1].data['NOISETIER'][mask] =  ttu[np.array([np.argmin((u-cvm)**2) for u in produce_cov(hdulist)[mask]])]
-                    print (np.unique(hdulist[1].data['NOISETIER']))
+        
 
                         
                     try:
