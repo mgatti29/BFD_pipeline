@@ -1,4 +1,0 @@
-numpy
-future
-astropy
-scipy
