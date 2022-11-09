@@ -5,6 +5,9 @@ recently tested with
 python 3.6.3
 # install (use pip install . when possible)
 - pandas (1.1.5)
+- pyfits (3.5)
+- matplotlib (3.3.49)
+- frogress (0.9.1)
 - numba (0.53.1)
 - scipy (1.5.4)
 - ngmix (2.2.1) [https://github.com/esheldon/ngmix.git]
