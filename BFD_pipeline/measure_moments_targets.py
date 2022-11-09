@@ -1,19 +1,16 @@
+import numpy as np
+import pandas as pd
+import pyfits as pf  
 import meds
 import psfex
 import bfd
 from bfd import momentcalc as mc
+from bfd.momentcalc import MomentCovariance
 from bfd.momenttable import TemplateTable, TargetTable
 from .read_meds_utils import Image, MOF_table, DetectionsTable,BandInfo
-
-from .utilities import save_obj, load_obj
+from .utilities import save_obj, load_obj, save_moments_targets
 import frogress
 import glob
-import numpy as np
-import pandas as pd
-import pyfits as pf
-from matplotlib import pyplot as plt
-import ngmix.gmix as gmix
-import ngmix         
 import timeit
 import pickle
 import os
@@ -22,110 +19,26 @@ import gc
 import math
 import time, sys
 import multiprocessing
-from functools import partial
-
-import sys         
+from functools import partial       
 import copy
 from astropy import version 
 import astropy.io.fits as fits
-import ngmix
 import galsim
 import joblib
-#from .mcal_routines import *
-#import metacal_m
-#from metacal_m import MetacalFitter, CONFIG
+import ngmix       
+import ngmix.gmix as gmix
 from ngmix.jacobian.jacobian_nb import jacobian_get_vu, jacobian_get_area
-
-from bfd.momentcalc import MomentCovariance
-
-def save_(self,fitsname,config):
-        '''
-        modified save function for moments with different sigma_Mf entries
-        '''
-        col=[]
-        col.append(fits.Column(name="id",format="K",array=self.id))
-        try:
-            col.append(fits.Column(name="id_simulated_gal",format="K",array=self.p0))
-            col.append(fits.Column(name="id_simulated_PSF",format="K",array=self.p0_PSF))
-        except:
-            pass
-        
-        col.append(fits.Column(name="Mf_per_band",format="{0}E".format(np.array(self.meb).shape[1]),array=self.meb))
-        try:
-            col.append(fits.Column(name="true_fluxes",format="{0}E".format(np.array(self.meb).shape[1]),array=self.true_fluxes))
-            
-        except:
-            pass
-        
-        col.append(fits.Column(name="moments",format="5E",array=self.moment))
-        col.append(fits.Column(name="xy", format="2D", array=self.xy))
-        
-        col.append(fits.Column(name="ra",format="D",array=self.ra))
-        col.append(fits.Column(name="dec",format="D",array=self.dec))
-        
-        PSF_moments = np.vstack([np.array(self.psf_Mf),np.array(self.psf_Mr),np.array(self.psf_M1),np.array(self.psf_M2)]).T
-        col.append(fits.Column(name="psf_moments",format="4E",array=PSF_moments))
-
-        try:
-            col.append(fits.Column(name="w_i",format="D",array=self.band1))
-            col.append(fits.Column(name="w_r",format="D",array=self.band2))
-            col.append(fits.Column(name="w_z",format="D",array=self.band3))
-        except:
-            pass
-
-
-        try:
-            l = np.array(self.meb).shape[1]
-            col.append(fits.Column(name="cov_Mf_per_band",format="{0}E".format(l),array=np.array(self.cov_even_per_band)[:,0,:]))
-        except:
-            pass
-        
-        try:
-            col.append(fits.Column(name="des_id",format="D",array=self.des_id))
-            col.append(fits.Column(name="photoz",format="D",array=self.photoz))
-        except:
-            pass
-
-        if len(self.num_exp) == len(self.id):
-            col.append(fits.Column(name="num_exp",format="K",array=self.num_exp))
-        col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
-    
-        if config['setup_image_sims']:
-            self.prihdu.header['STAMPS'] = 1  # Update value
-            col.append(fits.Column(name="AREA",format="K",array=np.zeros(len(self.id))))
-        
-        else:
-            self.prihdu.header['STAMPS'] = 0
-            #print ('AREA ', self.area)
-            col.append(fits.Column(name="AREA",format="K",array=self.area))
-            
-        cols=fits.ColDefs(col)
-        tbhdu = fits.BinTableHDU.from_columns(cols)
-        thdulist = fits.HDUList([self.prihdu,tbhdu])
-        thdulist.writeto(fitsname,overwrite=True)
-        return
-    
+ 
 def measure_moments_targets(output_folder,**config):
     '''
     It computes the moments from des y6 tiles.
     '''
-    
     # Read the config file
     print ('Executing the measure_target_moments stage')
     if config['MPI']:
         from mpi4py import MPI 
 
     # this checks how many tiles can be used. ****************************************
-    '''
-    for i, b in enumerate(config['bands']):
-        files = glob.glob(config['path_data']+str(b)+'/*fz') 
-        if i == 0:
-            tiles = ['DES'+f.split('DES')[1].split('_')[0] for f in files]
-        else:
-            tiles1 = ['DES'+f.split('DES')[1].split('_')[0] for f in files]
-            tiles = np.hstack([tiles,tiles1])
-        tiles_available = np.unique(tiles)
-    '''
     for i, b in enumerate(config['bands']):
         files = glob.glob(config['path_data']+'/*fz') 
         if i == 0:
@@ -262,21 +175,16 @@ def pipeline(config, dictionary_runs, count):
                 
             except:
                 pass
+                
         p_ = config['output_folder']+'/MOF_models/{0}_{1}.npy'.format(tile,len(tab_detections.images)-1)
         if not os.path.exists(p_):
             print ('pre-saving MOF fits')
             for ii_, index in enumerate(range(len(tab_detections.images))):
-                #try:
-                    np.save(config['output_folder']+'/MOF_models/{0}_{1}'.format(tile,index),tab_detections.images[index].MOF_models)
-                    del tab_detections.images[index].MOF_models
-                    if ii_% 1000 == 0:
-                        gc.collect()
-            #except:
-            #    pass
-                
-            
-        #except:
-        #    print ('failed to add MOF')
+                np.save(config['output_folder']+'/MOF_models/{0}_{1}'.format(tile,index),tab_detections.images[index].MOF_models)
+                del tab_detections.images[index].MOF_models
+                if ii_% 1000 == 0:
+                    gc.collect()
+
         print ('loading images and computing moments')
         
         # if it's an image sims run, load the MOF parameters for PSF and galaxies.
@@ -369,9 +277,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                     parhx= (path+'_chunk_{0}.fits'.format(iii)).replace('ISp','ISm')
             else:
                     parhx = path+'_chunk_{0}.fits'.format(iii)
-        
-            #print (chunk_range,len_file)
-            
+         
             if not os.path.exists(parhx):
         
 
@@ -396,10 +302,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                         if (index%50 == 0):
                             gc.collect()
                             
-                    idx_n_array = np.unique(np.array(idx_n_array))
-                    #for index in  frogress.bar(range(len(tab_detections.images))):
-
-                        
+                    idx_n_array = np.unique(np.array(idx_n_array))                        
                     for i,index in enumerate(idx_n_array):
 
                 
@@ -494,13 +397,6 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                     image_storage[index][index_band] = dict()
                                     for exp in range(start, end):  
                                         image_storage[index][index_band][exp] = [tab_detections.images[index].imlist[index_band][exp],tab_detections.images[index].MOF_model_rendered[index_band][exp],tab_detections.images[index].seglist[index_band][exp]]
-
-
-
-
-
-
-
 
 
                             tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = config['COADD_only'], flags = 0, MOF_subtraction = config['MOF_subtraction'], band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'])
@@ -706,7 +602,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                         print ('index failed :', index,tile,chunk_range)
                 print ('\n----\n')
     
-                save_(tab_targets,path+'_chunk_{0}.fits'.format(iii),config)
+                save_moments_targets(tab_targets,path+'_chunk_{0}.fits'.format(iii),config)
                 if config['debug']:
                     save_obj(path+'_image_storage_chunk_{0}.fits'.format(iii),image_storage)
                 
