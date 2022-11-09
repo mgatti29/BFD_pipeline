@@ -1,0 +1,49 @@
+
+
+run:
+     - measure_moments_targets
+    
+     
+     
+##
+######################################################################
+#                       general config
+######################################################################
+
+
+general:
+    output_folder: '/Users/marcogatti/Desktop/BFD/data_test'
+    n: 4.     # Default: 
+    sigma: 0.55  # Default: 0.5
+    band_dict: [['r',0.7],['i',0.2],['z',0.1]] #[['r',1.0]] #
+    bands: ['r', 'i', 'z'] #['r'] #
+    MPI: True
+    pad_factor: 4.
+  
+        
+######################################################################
+#                       measure_moments_targets
+######################################################################
+
+measure_moments_targets:
+    # This first part parallelises (MPI) on tiles and it does 5x multiprocessing on chunk size.
+    # Usually 1 tile per node is enough.
+
+    path_data: '/Users/marcogatti/Desktop/BFD/data/'
+    tiles: ['DES0137-3749'] 
+    agents_chunk: 20 
+    chunk_size: 400 
+    max_target_per_tile: 100000 
+    MOF_subtraction: True
+    shredder: True
+    path_shredder: '/Users/marcogatti/Desktop/BFD/data/shredex/'
+    cut_psf : [False,25]
+    MPI_per_tile : True # speed up for testing on 1 TILE
+    minimum_number_of_bands : 3
+    interp_masking : True
+    frac_limit: 0.3 # limit for throwing away targets
+    COADD_only: False
+    run_mcal: False
+    debug: False
+    setup_image_sims: False  
+    
