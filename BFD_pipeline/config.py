@@ -55,12 +55,22 @@ def BFD_pipeline(config):
                 config['measure_moments_targets'][key] = copy.copy(config['general'][key])
             except:
                 pass
-            config['measure_moments_templates'][key] = copy.copy(config['general'][key])
-            config['make_targets'][key] = copy.copy(config['general'][key])
-            config['make_templates'][key] = copy.copy(config['general'][key])
-            config['cpp_part'][key] = copy.copy(config['general'][key])
-            config['make_tiles_tt'][key] = copy.copy(config['general'][key])
-           
+
+            try:
+                config['measure_moments_templates'][key] = copy.copy(config['general'][key])
+            except:pass
+            try:       
+                config['make_targets'][key] = copy.copy(config['general'][key])
+            except:pass
+            try:       
+                config['make_templates'][key] = copy.copy(config['general'][key])
+            except:pass
+            try:       
+                config['cpp_part'][key] = copy.copy(config['general'][key])
+            except:pass
+            try:       
+                config['make_tiles_tt'][key] = copy.copy(config['general'][key])
+            except:pass
             #try:
             
             #except:
