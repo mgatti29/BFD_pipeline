@@ -36,5 +36,7 @@ module swap PrgEnv-Intel (on nersc!)
 # Example run
  x DESDM folks: in order to process meds files for the des y6 targets, do
 The config file needs to include the path to the meds files & shredder files.
-./run_bfd.py --config config/config_data.yaml --tiles DES_TILES,...
+./run_bfd.py --config config/config_data.yaml --tiles DES_TILES
+
+where DES_tiles can be a list of string, e.g: DES0137-3749, DES0137-3721
 
