@@ -1202,21 +1202,16 @@ class DetectionsTable:
                         wcs,nbrxyref = self.images[ii].make_WCS_2objects(self.images[ii], self.images[ii].bands[b], i,return_shift=True)
                     else:
                         wcs = self.images[ii].make_WCS_2objects(self.images[ii], self.images[ii].bands[b], i)
-                    #try:
+                 
                     if self.images[ii].MOF_model_shredder :
-                        #try:
+              
                            
                         u_,_ = render_gal(self.images[ii].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.,nbrxyref=nbrxyref)
-                        #except:
-                        #    print ('failed')
                     else:
                         u_,_ = render_gal(self.images[ii].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)
                         
               
                     rendered_image += u_
-                    #except:
-                    #    pass
-     
                 if render_others:
                     # check first list of neighbours in the segmentation map. always use segmap coadd
                 
@@ -1224,28 +1219,28 @@ class DetectionsTable:
                     list_MEDS_indexes = list_MEDS_indexes[list_MEDS_indexes!=0]
                     list_MEDS_indexes = list_MEDS_indexes[list_MEDS_indexes!=self.images[ii].index_MEDS+1]
 
-                    #try:
-                    if 1==1:
+           
                         
-                        for MEDS_index in list_MEDS_indexes:
-                            jj = np.array(self.index_MEDS_array)[np.in1d(np.array(self.index_MEDS_array),MEDS_index-1)][0]
-                        
-                            try:
-                                if self.images[ii].MOF_model_shredder :
-                                    wcs,nbrxyref = self.images[ii].make_WCS_2objects(self.images[jj], self.images[ii].bands[b], i,return_shift=True)
-                                else:
-                                    wcs = self.images[ii].make_WCS_2objects(self.images[jj], self.images[ii].bands[b], i)
-                            except:
-                                # sometimes it happens we don't have the exposure for the second object - in that case we don't generate a model.
-                                pass
-                            try:
-                                if self.images[ii].MOF_model_shredder :
-                                    m__,jac = render_gal(self.images[jj].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.,nbrxyref=nbrxyref)
-                                else:
-                                    m__,jac = render_gal(self.images[jj].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)
-                                rendered_image += m__
-                            except:
-                                pass
+                    for MEDS_index in list_MEDS_indexes:
+                        jj = np.array(self.index_MEDS_array)[np.in1d(np.array(self.index_MEDS_array),MEDS_index-1)][0]
+                    
+                        #try:
+                        if 1==1:
+                            if self.images[ii].MOF_model_shredder :
+                                wcs,nbrxyref = self.images[ii].make_WCS_2objects(self.images[jj], self.images[ii].bands[b], i,return_shift=True)
+                            else:
+                                wcs = self.images[ii].make_WCS_2objects(self.images[jj], self.images[ii].bands[b], i)
+                        #except:
+                            # sometimes it happens we don't have the exposure for the second object - in that case we don't generate a model.
+                        #    pass
+                        try:
+                            if self.images[ii].MOF_model_shredder :
+                                m__,jac = render_gal(self.images[jj].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.,nbrxyref=nbrxyref)
+                            else:
+                                m__,jac = render_gal(self.images[jj].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)
+                            rendered_image += m__
+                        except:
+                            pass
 
 
                         #pass

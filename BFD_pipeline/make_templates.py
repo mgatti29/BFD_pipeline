@@ -4,7 +4,7 @@ import bfd
 from bfd import momentcalc as mc
 from bfd.momenttable import TemplateTable
 from .read_meds_utils import Image, MOF_table, DetectionsTable, save_template
-from .utilities import update_progress, save_obj, load_obj
+from .utilities import  save_obj, load_obj
 import glob
 import numpy as np
 import pandas as pd

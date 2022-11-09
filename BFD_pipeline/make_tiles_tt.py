@@ -11,7 +11,7 @@ import bfd
 import sxdes
 import numpy as np
 import math
-from .utilities import update_progress, save_obj, load_obj
+from .utilities import  save_obj, load_obj
 import astropy.io.fits as fits
 import frogress
 import ngmix
