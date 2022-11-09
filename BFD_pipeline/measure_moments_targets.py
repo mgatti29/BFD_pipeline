@@ -31,9 +31,9 @@ import astropy.io.fits as fits
 import ngmix
 import galsim
 import joblib
-from .mcal_routines import *
-import metacal_m
-from metacal_m import MetacalFitter, CONFIG
+#from .mcal_routines import *
+#import metacal_m
+#from metacal_m import MetacalFitter, CONFIG
 from ngmix.jacobian.jacobian_nb import jacobian_get_vu, jacobian_get_area
 
 from bfd.momentcalc import MomentCovariance
@@ -175,7 +175,12 @@ def measure_moments_targets(output_folder,**config):
     print ('Executing the measure_target_moments stage')
     if config['MPI']:
         from mpi4py import MPI 
+
+    
+
+    
     # this checks how many tiles can be used. ****************************************
+    '''
     for i, b in enumerate(config['bands']):
         files = glob.glob(config['path_data']+str(b)+'/*fz') 
         if i == 0:
@@ -184,10 +189,20 @@ def measure_moments_targets(output_folder,**config):
             tiles1 = ['DES'+f.split('DES')[1].split('_')[0] for f in files]
             tiles = np.hstack([tiles,tiles1])
         tiles_available = np.unique(tiles)
-    
+    '''
+    for i, b in enumerate(config['bands']):
+        files = glob.glob(config['path_data']+'/*fz') 
+        if i == 0:
+            tiles = ['DES'+f.split('DES')[1].split('_')[0] for f in files]
+        else:
+            tiles1 = ['DES'+f.split('DES')[1].split('_')[0] for f in files]
+            tiles = np.hstack([tiles,tiles1])
+        tiles_available = np.unique(tiles)
+
     print ('Number of tiles available: ',len(tiles_available))
 
     # this selects the tiles to be used based on the config entries *******************
+    print ('Input target tiles: ',config['tiles'])
     if config['tiles'] == 'All':
         tiles_to_be_used = tiles_available
     elif type(config['tiles']) is list:
@@ -199,16 +214,29 @@ def measure_moments_targets(output_folder,**config):
         tiles_to_be_used = tiles_available[index]
     print ('Selected ',len(tiles_to_be_used),' tile(s).')
     
-    
+    '''
     # makes a dictionary of the tiles *************************************************
     dictionary_runs = dict()
     for tile in tiles_to_be_used:
         dictionary_runs[tile] = dict()
         for band in config['bands']:
             dictionary_runs[tile][band] = dict()
-            dictionary_runs[tile][band]['meds'] = glob.glob(config['path_data']+band+'/'+tile+'*fits.fz')[0]
-             
-                
+            dictionary_runs[tile][band]['meds'] = glob.glob(config['path_data']+band+'/'+tile+'*fits.fz')[0]         
+    '''
+
+    # makes a dictionary of the tiles *************************************************
+    dictionary_runs = dict()
+    for tile in tiles_to_be_used:
+        dictionary_runs[tile] = dict()
+        for band in config['bands']:
+            dictionary_runs[tile][band] = dict()
+            f_ = glob.glob(config['path_data']+'/'+tile+'*fits.fz')
+            dictionary_runs[tile][band]['meds'] = np.array(f_)[np.array([((band+'_meds') in ff) for ff in f_])][0]
+
+
+
+
+     
     # list of the runs to do. ********************************************************
     list_run = []
     for count, tile in enumerate(dictionary_runs.keys()):
@@ -246,6 +274,10 @@ def pipeline(config, dictionary_runs, count):
         tile = list(dictionary_runs.keys())[count]
         print ('TILE running: ',tile)
         
+        if 'external' not in config.keys():
+            config['external'] = False
+
+
         if config['setup_image_sims']:
             path = config['output_folder']+'/targets/ISp_targets_'+tile
         else:
@@ -286,10 +318,10 @@ def pipeline(config, dictionary_runs, count):
 
         # loads MOF **********
         files = []
-        if not config['shredder_x']:
+        if not config['shredder']:
             mute = glob.glob(config['path_data']+'mof/'+tile+'*')
         else:
-            mute = glob.glob(config['path_data']+'shredex/'+tile+'*')
+            mute = glob.glob(config['path_shredder']+'/'+tile+'*')
             
         if len(mute)>0:
             for m in mute:
