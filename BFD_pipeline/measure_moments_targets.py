@@ -329,7 +329,8 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                         print ('error')
                         import sys
                         sys.exit()
-                    try:
+                    #try:
+                    if 1==1:
                         if index_fixed:
                             index = copy.copy(index_fixed)
                             if config['external']:
@@ -545,7 +546,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                     tab_detections.insert_image(Wide_g,index)
                                     
                                     tab_detections.images[index].Load_MEDS_fast(index, meds = m_array)
-                                    tab_detections.images[index].MOF_models =  np.load(config['output_folder']+'/MOF_models/{0}_{1}.npy'.format(tile,index),allow_pickle=True)
+                                    tab_detections.images[index].MOF_models =  np.load(config['output_folder']+'/MOF_models/{0}_{1}.npy'.format(tile,index),allow_pickle=True).item()
                                     if index % 5:
                                         gc.collect()
 
@@ -598,8 +599,8 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         #del tab_detections.images[index]
                                     gc.collect()
 
-                    except:
-                        print ('index failed :', index,tile,chunk_range)
+                    #except:
+                    #    print ('index failed :', index,tile,chunk_range)
                 print ('\n----\n')
     
                 save_moments_targets(tab_targets,path+'_chunk_{0}.fits'.format(iii),config)

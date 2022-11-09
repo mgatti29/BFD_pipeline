@@ -1224,17 +1224,19 @@ class DetectionsTable:
                     for MEDS_index in list_MEDS_indexes:
                         jj = np.array(self.index_MEDS_array)[np.in1d(np.array(self.index_MEDS_array),MEDS_index-1)][0]
                     
-                        #try:
-                        if 1==1:
+                        try:
+                        #if 1==1:
                             if self.images[ii].MOF_model_shredder :
                                 wcs,nbrxyref = self.images[ii].make_WCS_2objects(self.images[jj], self.images[ii].bands[b], i,return_shift=True)
                             else:
                                 wcs = self.images[ii].make_WCS_2objects(self.images[jj], self.images[ii].bands[b], i)
-                        #except:
+                        except:
                             # sometimes it happens we don't have the exposure for the second object - in that case we don't generate a model.
-                        #    pass
+                            pass
+                        #if 1==1:
                         try:
                             if self.images[ii].MOF_model_shredder :
+             
                                 m__,jac = render_gal(self.images[jj].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.,nbrxyref=nbrxyref)
                             else:
                                 m__,jac = render_gal(self.images[jj].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)
