@@ -29,3 +29,12 @@ python 3.6.3
 
 # cpp part:
 module swap PrgEnv-Intel (on nersc!)
+
+
+
+
+# Example run
+ x DESDM folks: in order to process meds files for the des y6 targets, do
+
+./run_bfd.py --config config_data.yaml --tiles DES_TILES,...
+
