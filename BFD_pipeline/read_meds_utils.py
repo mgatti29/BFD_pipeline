@@ -362,15 +362,7 @@ class Image:
         # gaussian aperture ****
         psf_fwhm = 10.
         Tpsf = ngmix.moments.fwhm_to_T(psf_fwhm)
-        #print ('')
-        #print (Tpsf)
-        #print(np.sum(((self.wtlist[0][0].flatten()==0.) | (self.masklist[0][0].flatten()!=0.))))
-        #print (ngmix.jacobian.Jacobian(row=self.wcslist[0][0].xy0[1],
-        #              col=self.wcslist[0][0].xy0[0],
-        #              dudrow=self.wcslist[0][0 ].jac[0,1],
-        #              dudcol=self.wcslist[0][0].jac[0,0],
-        #              dvdrow=self.wcslist[0][0].jac[1,1],
-        #              dvdcol=self.wcslist[0][0].jac[1,0]))
+
         psf_pars = [0.0, 0.0, 0.0, 0.00, Tpsf, 1.0]
         psf_gmix = ngmix.GMixModel(pars=psf_pars, model="turb")
 
@@ -388,8 +380,7 @@ class Image:
                       dvdrow=self.wcslist[b][i].jac[1,1],
                       dvdcol=self.wcslist[b][i].jac[1,0]),fast_exp=True)).flatten()) for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
         
-        #ed3 = timeit.default_timer()
-        #print (ed3-ed,ed-st)
+   
     def check_mfrac(self, limit=0.1, use_COADD_only = False):
         '''
         It checks which bands have exposures with a fraction of pixels masked above the limit
@@ -1233,14 +1224,15 @@ class DetectionsTable:
                         except:
                             # sometimes it happens we don't have the exposure for the second object - in that case we don't generate a model.
                             pass
-                        #if 1==1:
+                
                         try:
                             if self.images[ii].MOF_model_shredder :
-             
                                 m__,jac = render_gal(self.images[jj].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.,nbrxyref=nbrxyref)
                             else:
                                 m__,jac = render_gal(self.images[jj].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)
                             rendered_image += m__
+                            #print (m__)
+                            #print (rendered_image)
                         except:
                             pass
 

@@ -40,7 +40,7 @@ measure_moments_targets:
     cut_psf : [False,25]
     MPI_per_tile : True # speed up for testing on 1 TILE
     minimum_number_of_bands : 3
-    interp_masking : True
+    interp_masking : False
     subtract_background : False
     add_detection_stamp : False
     frac_limit: 0.3 # limit for throwing away targets

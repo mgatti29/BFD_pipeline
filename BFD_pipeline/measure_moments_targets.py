@@ -310,7 +310,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             tab_detections.images[index].make_WCS()
                             del tab_detections.images[index].jaclist
                             
-                            tab_detections.images[index].MOF_models =  np.load(config['output_folder']+'/MOF_models/{0}_{1}.npy'.format(tile,index),allow_pickle=True)
+                            tab_detections.images[index].MOF_models =  np.load(config['output_folder']+'/MOF_models/{0}_{1}.npy'.format(tile,index),allow_pickle=True).item()
                             if (i%100 == 0):
                                 gc.collect()
           
@@ -393,7 +393,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
 
                             if config['debug']:
                                 for index_band in range(3):
-                                    start = 1
+                                    start = 0
                                     end = tab_detections.images[index].ncutout[index_band]
                                     image_storage[index][index_band] = dict()
                                     for exp in range(start, end):  

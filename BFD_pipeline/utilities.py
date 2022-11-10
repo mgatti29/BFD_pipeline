@@ -18,7 +18,7 @@ def load_obj(name):
 
 # saving utilities
 import astropy.io.fits as fits
-
+import numpy as np
 def save_moments_targets(self,fitsname,config):
         '''
         modified save function for moments with different sigma_Mf entries
