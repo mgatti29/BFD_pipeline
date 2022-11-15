@@ -209,13 +209,19 @@ def pipeline(config, dictionary_runs, count):
             run_count = 0
             
             while run_count<runs:
-                comm = MPI.COMM_WORLD
-                if run_count+comm.rank<runs:
+                if config['MPI']:
+                    comm = MPI.COMM_WORLD
+                    if run_count+comm.rank<runs:
+            
+                        f(run_count+comm.rank, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                    run_count+=comm.size
+                    comm.bcast(run_count,root = 0)
+                    comm.Barrier() 
+                else:
+                if run_count<runs:
         
-                    f(run_count+comm.rank, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
-                run_count+=comm.size
-                comm.bcast(run_count,root = 0)
-                comm.Barrier() 
+                    f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                run_count+=1
         else:
             if config['agents_chunk'] > 1:
                 
