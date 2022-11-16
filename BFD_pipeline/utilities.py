@@ -26,15 +26,16 @@ def save_moments_targets(self,fitsname,config):
         col=[]
         col.append(fits.Column(name="id",format="K",array=self.id))
         try:
-            col.append(fits.Column(name="id_simulated_gal",format="K",array=self.p0))
-            col.append(fits.Column(name="id_simulated_PSF",format="K",array=self.p0_PSF))
+            if len(self.p0)>0:
+                col.append(fits.Column(name="id_simulated_gal",format="K",array=self.p0))
+                col.append(fits.Column(name="id_simulated_PSF",format="K",array=self.p0_PSF))
         except:
             pass
         
         col.append(fits.Column(name="Mf_per_band",format="{0}E".format(np.array(self.meb).shape[1]),array=self.meb))
         try:
-            col.append(fits.Column(name="true_fluxes",format="{0}E".format(np.array(self.meb).shape[1]),array=self.true_fluxes))
-            
+            if len(self.true_fluxes)>0:
+                col.append(fits.Column(name="true_fluxes",format="{0}E".format(np.array(self.meb).shape[1]),array=self.true_fluxes))
         except:
             pass
         
@@ -48,9 +49,10 @@ def save_moments_targets(self,fitsname,config):
         col.append(fits.Column(name="psf_moments",format="4E",array=PSF_moments))
 
         try:
-            col.append(fits.Column(name="w_i",format="D",array=self.band1))
-            col.append(fits.Column(name="w_r",format="D",array=self.band2))
-            col.append(fits.Column(name="w_z",format="D",array=self.band3))
+            if len(self.band1)>0:
+                col.append(fits.Column(name="w_i",format="D",array=self.band1))
+                col.append(fits.Column(name="w_r",format="D",array=self.band2))
+                col.append(fits.Column(name="w_z",format="D",array=self.band3))
         except:
             pass
         try:
@@ -60,8 +62,9 @@ def save_moments_targets(self,fitsname,config):
             pass
         
         try:
-            col.append(fits.Column(name="des_id",format="D",array=self.des_id))
-            col.append(fits.Column(name="photoz",format="D",array=self.photoz))
+            if len(self.photoz)>0:
+                col.append(fits.Column(name="des_id",format="D",array=self.des_id))
+                col.append(fits.Column(name="photoz",format="D",array=self.photoz))
         except:
             pass
 
@@ -75,8 +78,11 @@ def save_moments_targets(self,fitsname,config):
         
         else:
             self.prihdu.header['STAMPS'] = 0
-            col.append(fits.Column(name="AREA",format="K",array=self.area))
+            col.append(fits.Column(name="AREA",format="K",array=self.AREA))
             
+
+
+
         cols=fits.ColDefs(col)
         tbhdu = fits.BinTableHDU.from_columns(cols)
         thdulist = fits.HDUList([self.prihdu,tbhdu])

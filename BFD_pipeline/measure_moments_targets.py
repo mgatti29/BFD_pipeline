@@ -244,6 +244,20 @@ def pipeline(config, dictionary_runs, count):
                     pass
 
 
+        # assemble it back ---------
+        files_targets = glob.glob(path+'*')
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -261,7 +275,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
             tab_targets.psf_Mr = []
             tab_targets.psf_M1= []
             tab_targets.psf_M2= []
-            tab_targets.area= []
+            tab_targets.AREA= []
 
             tab_targets.band1 = []
             tab_targets.band2 = []
@@ -347,6 +361,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                 image_storage_ = dict()
                         
                 for index_t in frogress.bar(range(chunk_range[0],chunk_range[1])):
+                
                     if len(tab_detections.images) != len_file:
                         print ('error')
                         import sys
@@ -355,11 +370,6 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                     if 1==1:
                         if index_fixed:
                             index = copy.copy(index_fixed)
-                            if config['external']:
-                                config['g1'][0] = external['e1'][index_t]
-                                config['g1'][1] = -external['e1'][index_t]
-                                config['g2'][0] = external['e2'][index_t]
-                                config['g2'][1] = -external['e2'][index_t]
                         else:
                             index = copy.copy(index_t)
                         try:
@@ -410,9 +420,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             mute_range = [index,index+1]
 
                             image_storage[index] = dict()
-                    
-
-
+            
                             if config['debug']:
                                 for index_band in range(3):
                                     start = 0
@@ -426,9 +434,6 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             del tab_detections.images[index].MOF_model_rendered
                             del tab_detections.images[index].imlist
                             gc.collect()
-
-
-
 
                             newcent=np.array([tab_detections.images[index].image_ra,tab_detections.images[index].image_dec])[:,0]+tab_detections.images[index].xyshift/3600.0
 
@@ -451,21 +456,15 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
 
                             count+=1
 
+                        
+                            tab_targets.add(mom, xy=newcent,id=tab_detections.images[index].image_ID[0],covgal=MomentCovariance(covgal[0],covgal[1]))
+                     
+                            #tab_targets.p0.append(p0)
+                            #tab_targets.p0_PSF.append(p0_PSF)
 
-                            if config['external']:
-                                tab_targets.add(mom, xy=newcent,id=index_t,covgal=MomentCovariance(covgal[0],covgal[1]))
-                            else:
-
-                                tab_targets.add(mom, xy=newcent,id=tab_detections.images[index].image_ID[0],covgal=MomentCovariance(covgal[0],covgal[1]))
-                            tab_targets.p0.append(p0)
-                            tab_targets.p0_PSF.append(p0_PSF)
-
-                            if config['external']:
-                                tab_targets.ra.append(external['ra'][index_t])
-                                tab_targets.dec.append(external['dec'][index_t])
-                            else:
-                                tab_targets.ra.append(newcent[0])
-                                tab_targets.dec.append(newcent[1])
+                            
+                            tab_targets.ra.append(newcent[0])
+                            tab_targets.dec.append(newcent[1])
 
                             meb_ = np.array([m_.even for m_ in meb])
                             tab_targets.meb.append(meb_[0,:])
@@ -474,10 +473,9 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             except:
                                 pass
                             Mf,Mr,M1,M2,_ = tab_detections.images[index].moments_PSF.get_moment(0.,0.).even
-
-
-                            tab_targets.area.append(0.)    
-
+                            
+                            tab_targets.AREA.append(0.)    
+                   
                             tab_targets.psf_Mf.append(Mf)
                             tab_targets.psf_Mr.append(Mr)
                             tab_targets.psf_M1.append(M1)
@@ -496,8 +494,8 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                 pass
 
 
-
-                            if index%100:
+                  
+                            if index%100==0:
                                 if config['add_detection_stamp']:
                                     if len(bands_not_masked) >= config['minimum_number_of_bands']:
                                         #print ('adding detection stamp')
@@ -515,8 +513,8 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = config['COADD_only'], flags = 0, MOF_subtraction = False, band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'])
 
                                         tab_targets.add(mom, xy=newcent,id=tab_detections.images[index].image_ID[0],covgal=MomentCovariance(covgal[0],covgal[1]))
-                                        tab_targets.p0.append(p0)
-                                        tab_targets.p0_PSF.append(p0_PSF)
+                                        #tab_targets.p0.append(p0)
+                                       # tab_targets.p0_PSF.append(p0_PSF)
 
 
                                         tab_targets.ra.append(newcent[0])
@@ -532,7 +530,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         Mf,Mr,M1,M2,_ = tab_detections.images[index].moments_PSF.get_moment(0.,0.).even
 
 
-                                        tab_targets.area.append(10.)    
+                                        tab_targets.AREA.append(100.)    
 
                                         tab_targets.psf_Mf.append(Mf)
                                         tab_targets.psf_Mr.append(Mr)

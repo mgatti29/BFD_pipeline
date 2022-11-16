@@ -323,7 +323,7 @@ class Image:
                     
                 interp_image = image.copy()
                 interp_image = image.copy()
-                interp_image[bad_mask] = img_interp(bad_pix)
+                interp_image[bad_mask] = img_interp[0](bad_pix)
 
                 if interp_image is None:
                     return image
