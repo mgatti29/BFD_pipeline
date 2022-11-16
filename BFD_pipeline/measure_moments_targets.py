@@ -218,10 +218,10 @@ def pipeline(config, dictionary_runs, count):
                     comm.bcast(run_count,root = 0)
                     comm.Barrier() 
                 else:
-                if run_count<runs:
-        
-                    f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
-                run_count+=1
+                    if run_count<runs:
+            
+                        f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                    run_count+=1
         else:
             if config['agents_chunk'] > 1:
                 
@@ -232,6 +232,22 @@ def pipeline(config, dictionary_runs, count):
             else:
                 for x in xlist:
                     f(x, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs, params_image_sims = params_image_sims,external=external,tile=tile)
+
+
+        # clean MOF and assemble
+        if config['MOF_subtraction']:
+            for ii_, index in enumerate(range(len(tab_detections.images))):
+                path_ = config['output_folder']+'/MOF_models/{0}_{1}.npy'.format(tile,index)
+                try:
+                    os.remove(path_)
+                except:
+                    pass
+
+
+
+
+
+
 
 def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, bands, len_file, runs, params_image_sims,external,tile):
             
@@ -538,8 +554,6 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                                 end = tab_detections.images[index].ncutout[index_band]
                                                 image_storage[index][index_band] = dict()
                                                 for exp in range(start, end):  
-
-
                                                     image_storage[index][index_band][exp] = [tab_detections.images[index].imlist[index_band][exp],0,False]
                                     
 
@@ -622,4 +636,6 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
 
                # except:
                #     pass
+
+
 

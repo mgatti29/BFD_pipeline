@@ -305,6 +305,10 @@ def cpp_part(output_folder,**config):
                                 
                                 # divide templates into chunks +++++++++++++++++
                                 
+                                
+                                
+                                
+                                
                                 templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[run_count+comm.rank])
                                 templates_ = pf.open(templatesfile)
                                 templates_i = copy.copy(templates_)
@@ -312,40 +316,42 @@ def cpp_part(output_folder,**config):
                                 n_batch_templates = math.ceil(len_templ/config['bacth_size_templates'])
                          
                                 for n in range(n_batch_templates):
-                                    c = templates_[1].columns
-                                    cols = [] 
-                                    for k in c:
+                                
+                                    if add != 'ISm_':
+                                        c = templates_[1].columns
+                                        cols = [] 
+                                        for k in c:
+                                            try:
+                                                cols.append(pf.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][n*config['bacth_size_templates']:(n+1)*config['bacth_size_templates'],:]))
+                                            except:
+                                                cols.append(pf.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][n*config['bacth_size_templates']:(n+1)*config['bacth_size_templates']]))
+
+
+                                        new_cols = pf.ColDefs(cols)
+                                        hdu = pf.BinTableHDU.from_columns(new_cols)
+
+
+
+                                        templates_i[1] = hdu
+                                        templates_i[1].header[hdrkeys['weightN']] = templates_[1].header[hdrkeys['weightN']]
+                                        templates_i[1].header[hdrkeys['weightSigma']] = templates_[1].header[hdrkeys['weightSigma']]
+
+                                        templates_i[1].header['FLUX_MIN'] = templates_[1].header['FLUX_MIN']
+                                        templates_i[1].header['SIG_XY'] = templates_[1].header['SIG_XY']
+                                        templates_i[1].header['SIG_FLUX'] = templates_[1].header['SIG_FLUX']
+                                        templates_i[1].header['SIG_STEP'] = templates_[1].header['SIG_STEP']
+                                        templates_i[1].header['SIG_MAX'] = templates_[1].header['SIG_MAX']
+                                        templates_i[1].header['EFFAREA'] = templates_[1].header['EFFAREA']
+                                        templates_i[1].header['TIER_NUM'] = templates_[1].header['TIER_NUM']
+
+                                        # save the new target files ****
                                         try:
-                                            cols.append(pf.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][n*config['bacth_size_templates']:(n+1)*config['bacth_size_templates'],:]))
+                                            templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n))
                                         except:
-                                            cols.append(pf.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][n*config['bacth_size_templates']:(n+1)*config['bacth_size_templates']]))
-
-
-                                    new_cols = pf.ColDefs(cols)
-                                    hdu = pf.BinTableHDU.from_columns(new_cols)
-
-
-
-                                    templates_i[1] = hdu
-                                    templates_i[1].header[hdrkeys['weightN']] = templates_[1].header[hdrkeys['weightN']]
-                                    templates_i[1].header[hdrkeys['weightSigma']] = templates_[1].header[hdrkeys['weightSigma']]
-
-                                    templates_i[1].header['FLUX_MIN'] = templates_[1].header['FLUX_MIN']
-                                    templates_i[1].header['SIG_XY'] = templates_[1].header['SIG_XY']
-                                    templates_i[1].header['SIG_FLUX'] = templates_[1].header['SIG_FLUX']
-                                    templates_i[1].header['SIG_STEP'] = templates_[1].header['SIG_STEP']
-                                    templates_i[1].header['SIG_MAX'] = templates_[1].header['SIG_MAX']
-                                    templates_i[1].header['EFFAREA'] = templates_[1].header['EFFAREA']
-                                    templates_i[1].header['TIER_NUM'] = templates_[1].header['TIER_NUM']
-
-                                    # save the new target files ****
-                                    try:
-                                        templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n))
-                                    except:
-                                        try:
-                                            templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n),clobber = True)# 
-                                        except:
-                                            pass
+                                            try:
+                                                templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n),clobber = True)# 
+                                            except:
+                                                pass
 
 
                                 

@@ -26,12 +26,10 @@ general:
 ######################################################################
 
 measure_moments_targets:
-    # This first part parallelises (MPI) on tiles and it does 5x multiprocessing on chunk size.
-    # Usually 1 tile per node is enough.
 
     path_data: '/Users/marcogatti/Desktop/BFD/data/'
     tiles: ['DES0137-3749'] 
-    agents_chunk: 20 
+    agents_chunk: 20  # works if MPI_per_tile is False. Spawns X multiprocess
     chunk_size: 400 
     max_target_per_tile: 100000 
     MOF_subtraction: True
