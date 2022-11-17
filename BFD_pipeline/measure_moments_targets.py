@@ -5,6 +5,7 @@ import meds
 import psfex
 import bfd
 from bfd import momentcalc as mc
+from bfd.keywords import *
 from bfd.momentcalc import MomentCovariance
 from bfd.momenttable import TemplateTable, TargetTable
 from .read_meds_utils import Image, MOF_table, DetectionsTable,BandInfo
