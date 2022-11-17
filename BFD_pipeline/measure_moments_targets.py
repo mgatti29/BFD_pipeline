@@ -205,7 +205,7 @@ def pipeline(config, dictionary_runs, count):
         xlist = range(runs)
         print ('subruns for this tile: ',runs,' chunk size: ', chunk_size)
         
-        if not os.path.eists(path+'.fits'):
+        if not os.path.exists(path+'.fits'):
             if config['MPI_per_tile']:
                 run_count = 0
                 
