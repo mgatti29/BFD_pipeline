@@ -245,10 +245,55 @@ def pipeline(config, dictionary_runs, count):
 
 
         # assemble it back ---------
-        files_targets = glob.glob(path+'*')
+        files = glob.glob(path+'*')
+        for ii in frogress.bar(range(len(files))):
+            file = files[ii]
+            try:
+                mute = pf.open(file)
+            except:
+                pass
+            if ii ==0:
+                mf  = mute[1].data['moments'][:,0]
+            else:
+                mf = np.hstack([mf,mute[1].data['moments'][:,0]])
 
+        hdulist = pf.HDUList([pf.PrimaryHDU()])
+        cols = []        
+        cols.append(pf.Column(name="notes",format="K",array=0*np.ones_like(mf)))#noisetier[mask]*np.ones_like(noisetier[mask])))
+        new_cols = pf.ColDefs(cols)
+        hdu = pf.BinTableHDU.from_columns(mute[1].columns + new_cols)
+        for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
+            hdu.header[key] = mute[0].header[key]
+        for cname in mute[1].columns.names:
+            sofar = 0
+            for ii, file in enumerate(files):
+                mute = pf.open(file)
+                nn = len(mute[1].data['moments'][:,0])
+                hdu.data[cname][sofar:sofar+nn] = mute[1].data[cname]
+                sofar += nn  
+            
 
+                                        
 
+        for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
+            hdulist[0].header[key] = mute[0].header[key]
+        hdulist[0].header['STAMPS'] = mute[0].header['STAMPS']
+        hdulist.append(hdu)
+        del hdu
+
+        for file_ in files:
+            try:
+                os.remove(file_)
+            except:
+                pass
+
+        try:
+            hdulist.writeto(path+'.fits')
+        except:
+            try:
+                hdulist.writeto(path+'.fits',clobber = True)# 
+            except:
+                pass
 
 
 
