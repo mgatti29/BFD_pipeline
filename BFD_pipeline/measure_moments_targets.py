@@ -9,7 +9,7 @@ from bfd.keywords import *
 from bfd.momentcalc import MomentCovariance
 from bfd.momenttable import TemplateTable, TargetTable
 from .read_meds_utils import Image, MOF_table, DetectionsTable,BandInfo
-from .utilities import save_obj, load_obj, save_moments_targets
+from .utilities import save_obj, load_obj, save_moments_targets, collpase
 import frogress
 import glob
 import timeit
@@ -205,34 +205,34 @@ def pipeline(config, dictionary_runs, count):
         xlist = range(runs)
         print ('subruns for this tile: ',runs,' chunk size: ', chunk_size)
         
-       
-        if config['MPI_per_tile']:
-            run_count = 0
-            
-            while run_count<runs:
-                if config['MPI']:
-                    comm = MPI.COMM_WORLD
-                    if run_count+comm.rank<runs:
-            
-                        f(run_count+comm.rank, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
-                    run_count+=comm.size
-                    comm.bcast(run_count,root = 0)
-                    comm.Barrier() 
-                else:
-                    if run_count<runs:
-            
-                        f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
-                    run_count+=1
-        else:
-            if config['agents_chunk'] > 1:
+        if not os.path.eists(path+'.fits'):
+            if config['MPI_per_tile']:
+                run_count = 0
                 
-                pool = multiprocessing.Pool(processes=config['agents_chunk'])
-
-                _ = pool.map(partial(f, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = copy.deepcopy(dictionary_runs[tile]), bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile), xlist)
+                while run_count<runs:
+                    if config['MPI']:
+                        comm = MPI.COMM_WORLD
+                        if run_count+comm.rank<runs:
                 
+                            f(run_count+comm.rank, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                        run_count+=comm.size
+                        comm.bcast(run_count,root = 0)
+                        comm.Barrier() 
+                    else:
+                        if run_count<runs:
+                
+                            f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                        run_count+=1
             else:
-                for x in xlist:
-                    f(x, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs, params_image_sims = params_image_sims,external=external,tile=tile)
+                if config['agents_chunk'] > 1:
+                    
+                    pool = multiprocessing.Pool(processes=config['agents_chunk'])
+
+                    _ = pool.map(partial(f, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = copy.deepcopy(dictionary_runs[tile]), bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile), xlist)
+                    
+                else:
+                    for x in xlist:
+                        f(x, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs, params_image_sims = params_image_sims,external=external,tile=tile)
 
 
         # clean MOF and assemble
@@ -246,56 +246,16 @@ def pipeline(config, dictionary_runs, count):
 
 
         # assemble it back ---------
-        files = glob.glob(path+'*')
-        for ii in frogress.bar(range(len(files))):
-            file = files[ii]
-            try:
-                mute = pf.open(file)
-            except:
-                pass
-            if ii ==0:
-                mf  = mute[1].data['moments'][:,0]
-            else:
-                mf = np.hstack([mf,mute[1].data['moments'][:,0]])
+        if config['MPI']:
+            comm = MPI.COMM_WORLD
+            run_count = 0
+            if comm.rank == 0:
+                collpase(path)
 
-        hdulist = pf.HDUList([pf.PrimaryHDU()])
-        cols = []        
-        cols.append(pf.Column(name="notes",format="K",array=0*np.ones_like(mf)))#noisetier[mask]*np.ones_like(noisetier[mask])))
-        new_cols = pf.ColDefs(cols)
-        hdu = pf.BinTableHDU.from_columns(mute[1].columns + new_cols)
-        for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
-            hdu.header[key] = mute[0].header[key]
-        for cname in mute[1].columns.names:
-            sofar = 0
-            for ii, file in enumerate(files):
-                mute = pf.open(file)
-                nn = len(mute[1].data['moments'][:,0])
-                hdu.data[cname][sofar:sofar+nn] = mute[1].data[cname]
-                sofar += nn  
-            
-
-                                        
-
-        for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
-            hdulist[0].header[key] = mute[0].header[key]
-        hdulist[0].header['STAMPS'] = mute[0].header['STAMPS']
-        hdulist.append(hdu)
-        del hdu
-
-        for file_ in files:
-            try:
-                os.remove(file_)
-            except:
-                pass
-
-        try:
-            hdulist.writeto(path+'.fits')
-        except:
-            try:
-                hdulist.writeto(path+'.fits',clobber = True)# 
-            except:
-                pass
-
+            comm.bcast(run_count,root = 0)
+            comm.Barrier() 
+        else:
+            collapse(path)
 
 
 
