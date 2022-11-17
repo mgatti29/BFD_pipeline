@@ -92,7 +92,7 @@ def save_moments_targets(self,fitsname,config):
 
 # cllpase
 
-        def collpase(path):
+def collpase(path):
             files = glob.glob(path+'*')
             for ii in frogress.bar(range(len(files))):
                 file_ = files[ii]
