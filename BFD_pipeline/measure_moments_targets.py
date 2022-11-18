@@ -236,6 +236,7 @@ def pipeline(config, dictionary_runs, count):
 
 
         # clean MOF and assemble
+        print ('delete mof models')
         if config['MOF_subtraction']:
             for ii_, index in enumerate(range(len(tab_detections.images))):
                 path_ = config['output_folder']+'/MOF_models/{0}_{1}.npy'.format(tile,index)
@@ -244,7 +245,7 @@ def pipeline(config, dictionary_runs, count):
                 except:
                     pass
 
-
+        print ('assemble')
         # assemble it back ---------
         if config['MPI']:
             comm = MPI.COMM_WORLD
