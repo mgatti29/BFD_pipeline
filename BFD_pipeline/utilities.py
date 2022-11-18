@@ -2,6 +2,7 @@ import pickle
 import glob
 import frogress
 import pyfits as pf
+from bfd.keywords import *
 def save_obj(name, obj):
     with open(name + '.pkl', 'wb') as f:
         pickle.dump(obj, f, protocol=3)
