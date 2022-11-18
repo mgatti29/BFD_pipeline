@@ -247,16 +247,17 @@ def pipeline(config, dictionary_runs, count):
 
         print ('assemble')
         # assemble it back ---------
-        if config['MPI']:
-            comm = MPI.COMM_WORLD
-            run_count = 0
-            if comm.rank == 0:
-                collpase(path)
+        if not os.path.exists(path+'.fits'):
+            if config['MPI']:
+                comm = MPI.COMM_WORLD
+                run_count = 0
+                if comm.rank == 0:
+                    collpase(path)
 
-            comm.bcast(run_count,root = 0)
-            comm.Barrier() 
-        else:
-            collapse(path)
+                comm.bcast(run_count,root = 0)
+                comm.Barrier() 
+            else:
+                collapse(path)
 
 
 
