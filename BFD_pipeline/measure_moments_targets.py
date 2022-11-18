@@ -9,7 +9,7 @@ from bfd.keywords import *
 from bfd.momentcalc import MomentCovariance
 from bfd.momenttable import TemplateTable, TargetTable
 from .read_meds_utils import Image, MOF_table, DetectionsTable,BandInfo
-from .utilities import save_obj, load_obj, save_moments_targets, collpase
+from .utilities import save_obj, load_obj, save_moments_targets, collapse
 import frogress
 import glob
 import timeit
@@ -205,7 +205,7 @@ def pipeline(config, dictionary_runs, count):
         xlist = range(runs)
         print ('subruns for this tile: ',runs,' chunk size: ', chunk_size)
         
-        if not os.path.exists(path+'.fits'):
+        if not os.path.exists(path+config['output_label']+'.fits'):
             if config['MPI_per_tile']:
                 run_count = 0
                 
@@ -214,25 +214,25 @@ def pipeline(config, dictionary_runs, count):
                         comm = MPI.COMM_WORLD
                         if run_count+comm.rank<runs:
                 
-                            f(run_count+comm.rank, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                            f(run_count+comm.rank, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
                         run_count+=comm.size
                         comm.bcast(run_count,root = 0)
                         comm.Barrier() 
                     else:
                         if run_count<runs:
                 
-                            f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                            f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
                         run_count+=1
             else:
                 if config['agents_chunk'] > 1:
                     
                     pool = multiprocessing.Pool(processes=config['agents_chunk'])
 
-                    _ = pool.map(partial(f, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = copy.deepcopy(dictionary_runs[tile]), bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile), xlist)
+                    _ = pool.map(partial(f, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = copy.deepcopy(dictionary_runs[tile]), bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile), xlist)
                     
                 else:
                     for x in xlist:
-                        f(x, config = config, params_template = params_template,chunk_size=chunk_size, path = path, tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs, params_image_sims = params_image_sims,external=external,tile=tile)
+                        f(x, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs, params_image_sims = params_image_sims,external=external,tile=tile)
 
 
         # clean MOF and assemble
@@ -247,17 +247,17 @@ def pipeline(config, dictionary_runs, count):
 
         print ('assemble')
         # assemble it back ---------
-        if not os.path.exists(path+'.fits'):
+        if not os.path.exists(path+config['output_label']+'.fits'):
             if config['MPI']:
                 comm = MPI.COMM_WORLD
                 run_count = 0
                 if comm.rank == 0:
-                    collpase(path)
+                    collapse(path+config['output_label'])
 
                 comm.bcast(run_count,root = 0)
                 comm.Barrier() 
             else:
-                collapse(path)
+                collapse(path+config['output_label'])
 
 
 

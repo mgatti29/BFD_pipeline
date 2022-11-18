@@ -7,7 +7,6 @@ import glob
 import numpy as np
 import pandas as pd
 import pyfits as pf
-from matplotlib import pyplot as plt
 import ngmix.gmix as gmix
 
 import gc
@@ -1062,6 +1061,8 @@ class DetectionsTable:
             data_ = {'pos': index_to_match,
                 'TILENAME': (MOF_table.tilename).byteswap().newbyteorder(),
                 'MAG_I': (MOF_table.MAG_I).byteswap().newbyteorder(),
+                'MAG_R': (MOF_table.MAG_R).byteswap().newbyteorder(),
+                'MAG_Z': (MOF_table.MAG_Z).byteswap().newbyteorder(),
                 'RA': (MOF_table.ra).byteswap().newbyteorder(),
                 'DEC': (MOF_table.dec).byteswap().newbyteorder(),
                 }
