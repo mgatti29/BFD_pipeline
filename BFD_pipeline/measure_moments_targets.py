@@ -475,7 +475,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             tab_targets.dec.append(newcent[1])
 
                             meb_ = np.array([m_.even for m_ in meb])
-                            tab_targets.meb.append(meb_[0,:])
+                            tab_targets.meb.append(meb_[:,0])
                             try:
                                 tab_targets.true_fluxes.append(fluxes)
                             except:
@@ -529,7 +529,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         tab_targets.dec.append(newcent[1])
 
                                         meb_ = np.array([m_.even for m_ in meb])
-                                        tab_targets.meb.append(meb_[0,:])
+                                        tab_targets.meb.append(meb_[:,0])
 
                                         try:
                                             tab_targets.true_fluxes.append(fluxes)
