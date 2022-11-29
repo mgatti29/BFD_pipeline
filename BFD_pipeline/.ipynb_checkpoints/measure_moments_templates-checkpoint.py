@@ -3,8 +3,8 @@ import psfex
 import bfd
 from bfd import momentcalc as mc
 from bfd.momenttable import TemplateTable
-from .read_meds_utils import Image, MOF_table, DetectionsTable, BandInfo
-from .utilities import update_progress, save_obj, load_obj
+from .read_meds_utils import Image, MOF_table, DetectionsTable, BandInfo,select_obj
+from .utilities import  save_obj, load_obj
             
 from astropy import units as uu
 from astropy.coordinates import SkyCoord
@@ -28,54 +28,33 @@ import sys
 import copy
 import frogress
 
-def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_file, runs,output_folder,tile,params_image_sims):    
+def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_file, runs,output_folder,tile):    
+    
     m_array = [meds.MEDS(dic[tile][band]['meds'][0]) for band in bands]
     psf_array = [psfex.PSFEx(dic[tile][band]['psf'][0])for band in bands]
-
-    tab_detections_out = copy.copy(tab_detections)
-    
-    if config['setup_image_sims']:
-        path = output_folder+'/templates/'+'/IS_templates_'+tile+'_chunk_'+str(iii)
-        path_A = output_folder+'/templates/'+'/AIS_templates_'+tile+'_chunk_'+str(iii)
-    else:
-        path = output_folder+'/templates/'+'/templates_'+tile+'_chunk_'+str(iii)
-        path_A = output_folder+'/templates/'+'/Atemplates_'+tile+'_chunk_'+str(iii)
-        
+    tab_detections_out = copy.deepcopy(tab_detections)
+    path = output_folder+'/templates/'+'/templates_'+tile+'_chunk_'+str(iii)
+    path_A = output_folder+'/templates/'+'/Atemplates_'+tile+'_chunk_'+str(iii)
+    path_i = output_folder+'/templates/'+'/image_storage_templates_'+tile+'_chunk_'+str(iii)
+    image_storage = dict()
  
     if not os.path.exists(path+'.pkl'):  
   
-        start = timeit.default_timer()
-
+        # define the chunk range ++++++++
         chunk_range =  [int(chunk_size*iii),int(np.min([chunk_size*(iii+1),len_file]))] 
     
-        number_of_replicas = 1
-        if config['setup_image_sims']:
-            '''
-            Here I should create the image_ from image sims.
-            '''
-            number_of_replicas = config['number_of_replicas']
-
-        try:
-            index_fixed = config['index_fixed']
-        except:
-            index_fixed = False
-        EFFAREA = (chunk_range[1]-chunk_range[0])*number_of_replicas
+        # number of objects
+        EFFAREA = (chunk_range[1]-chunk_range[0])
 
 
         if config['MOF_subtraction']:
-            for index_t in frogress.bar(len( tab_detections.images)):
+            for index_t in frogress.bar(range(len( tab_detections.images))):
+                tab_detections.images[index_t].Load_MEDS_fast(index_t, meds = m_array)
                 tab_detections.images[index_t].make_WCS()  
                         
-        for index_run in frogress.bar(range(chunk_range[0],chunk_range[1])):
+        for index in frogress.bar(range(chunk_range[0],chunk_range[1])):
             
-        #for index_run in (range(chunk_range[0],chunk_range[1])):
-             
-            
-            if index_fixed:
-                index = copy.copy(index_fixed)
-            else:
-                index = copy.copy(index_run)
-
+            image_storage[index] = dict()
             # load meds for image 'index'              
             tab_detections.images[index].Load_MEDS(index, meds = m_array)   
             # read WCS 
@@ -84,109 +63,58 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
             tab_detections.images[index].add_PSF_model(index, psf = psf_array, psf_type = 'PSFex', bands = bands)
             tab_detections.images[index].zero_padd_psf()
 
-
-
-            p0,p0_PSF=0,0
-            # the following loop allows to use simulate images instead real galaxyes
-            #print (config['setup_image_sims'],number_of_replicas)
-            count_replica = 0
-            for replica in range(number_of_replicas):
-        
-                if config['setup_image_sims']:
-                    try: 
-                        resize_sn = config['resize_sn']
-                    except:
-                        resize_sn = 1. 
-                    try:
-                        noise_ext = config['noise_ext']
-                    except:
-                        noise_ext = False
-                        
-                    if replica%2 == 0:
-                        # generate a simulated image
-                        redoit = True
-                        while redoit:
-                            if config['index_P0']: 
-
-                                index_mute_ = copy.copy(config['index_P0'])
-                            else:
-                                index_mute_ = copy.copy(index_run)
-                            sim_p,sim_m,sim_PSF,p0,p0_PSF,fluxes,jac = tab_detections.generate_simulated_images(index,config,params_image_sims,use_COADD_only=config['COADD_only'],noiseless=config['noiseless'],  maskless = config['maskless'],size_stamp='auto',index_P0= index_mute_,index_P0_PSF=config['index_P0_PSF'],noise_factor = config['noise_factor'],count_replica=count_replica ,resize_sn=resize_sn, noise_ext = noise_ext,g1=[0.,0.],g2=[0.,0.])
-                            count_replica+=1
-                            #print (config['index_P0'],index,p0,p0_PSF)
-                            if sim_p is None:
-                                pass
-                            if sim_p is not None:
-                                redoit = False
-                        tab_detections.images[index].imlist = copy.deepcopy(sim_p)
-                        tab_detections.images[index].psf = copy.deepcopy(sim_PSF)
              
-                #Interpolates ther images over masked pixels
-                if config['interp_masking']:
-                    tab_detections.images[index].deal_with_bmask(use_COADD_only = config['COADD_only'])
-                bands_not_masked = tab_detections.images[index].check_mfrac(limit=config['frac_limit'], use_COADD_only = config['COADD_only'])
-            
-                # remove exposures that don't pass the mask fraction.
-                #tab_detections.images[index].discard_exposures_mfrac(config['frac_limit'])
+            #Interpolates ther images over masked pixels
+            if config['interp_masking']:
+                tab_detections.images[index].deal_with_bmask(use_COADD_only = config['COADD_only'])
+            bands_not_masked = tab_detections.images[index].check_mfrac(limit=config['frac_limit'], use_COADD_only = config['COADD_only'])
 
-                #subtract background
+            if config['subtract_background']:
                 tab_detections.images[index].subtract_background()
-                #computes noise based on mask and weightmap, and then discard them.
-          
+            tab_detections.images[index].compute_noise()
 
-                if config['setup_image_sims']:
-                    tab_detections.images[index].compute_noise(config['noise_factor'],noise_ext)
-                else:
-                    tab_detections.images[index].compute_noise()
 
-         
-                # cut the psf stamp - for testing mostly
-                if config['cut_psf'][0]:
-                    for b in range(len(tab_detections.images[index].bands)):
-                        for i in range((tab_detections.images[index].ncutout[b])):
-                            NN = tab_detections.images[index].psf[b][i].shape[0]
-                            M = np.zeros((NN,NN))
-                            u = np.int((NN-config['cut_psf'][1])/2)
-                            M[u:-u,u:-u] = 1.
-                            tab_detections.images[index].psf[b][i] *= M
 
-                
-                if len(bands_not_masked) < config['minimum_number_of_bands']:
-                    #print ('too many pixels masked')
-                    tab_detections.images[index].flags += 1
-
-                
-                else:
-
-                    # read WCS and compute moments
                     
-                    if config['MOF_subtraction']:
-                        tab_detections.render_MOF_models(index = index, render_self = False, render_others = True)
-                    mute_range = [index,index+1]
+            # cut the psf stamp - for testing mostly
+            if config['cut_psf'][0]:
+                for b in range(len(tab_detections.images[index].bands)):
+                    for i in range((tab_detections.images[index].ncutout[b])):
+                        NN = tab_detections.images[index].psf[b][i].shape[0]
+                        M = np.zeros((NN,NN))
+                        u = np.int((NN-config['cut_psf'][1])/2)
+                        M[u:-u,u:-u] = 1.
+                        tab_detections.images[index].psf[b][i] *= M
 
+
+            if len(bands_not_masked) < config['minimum_number_of_bands']:
+                #print ('too many pixels masked')
+                tab_detections.images[index].flags += 1
+
+                if config['debug']:
+                    for index_band in range(3):
+                        image_storage[index][index_band] = [tab_detections.images[index].imlist[index_band],0.,tab_detections.images[index].seglist[index_band]]
+                    
+            else:
+
+                # read WCS and compute moments
+
+                if config['MOF_subtraction']:
+                    tab_detections.render_MOF_models(index = index, render_self = False, render_others = True)
+                mute_range = [index,index+1]
+
+                try:
                     tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = True, flags = 0, MOF_subtraction = config['MOF_subtraction'], band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'])
-                    
                     mom, meb = tab_detections.images[index].moments.get_moment(0.,0.,returnbands=True)
-                    
-                  
-                    
-                    tab_detections_out.images[index_run] = copy.deepcopy(tab_detections.images[index])
-                    tab_detections_out.images[index_run].p0 = p0
-                    tab_detections_out.images[index_run].p0_PSF = p0_PSF
-              
+                    tab_detections_out.images[index] = copy.deepcopy(tab_detections.images[index])
             
-            
-                    #tab_detections.images[index].imlist = None
-                    #tab_detections.images[index].seglist = None
-                    #tab_detections.images[index].masklist = None
-                    #tab_detections.images[index].wtlist = None
-                    #tab_detections.images[index].jaclist = None
-                    #tab_detections.images[index].psf = None
-                    #tab_detections.images[index].MOF_model_rendered = None
-                
-        #for index_run in range(100):
-        #    print (tab_detections_out.images[index_run].p0)
-        
+
+                    if config['debug']:
+                        for index_band in range(3):
+                            image_storage[index][index_band] = [tab_detections.images[index].imlist[index_band],tab_detections.images[index].MOF_model_rendered[index_band],tab_detections.images[index].seglist[index_band]]
+                except:
+                    pass
+                    
         gc.collect()
         #print (chunk_range)
         print ('erase >- ')
@@ -221,17 +149,31 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
                         tab_detections_out.images[index].moments = None
                     except:
                         pass
+                    
+        for index in frogress.bar(range(len(tab_detections_out.images))):
+            try:
+                del tab_detections_out.images[index].MOF_models    
+            except:
+                pass
+                
         gc.collect()
         
        
         tab_detections.EFFAREA = EFFAREA
         save_obj(path_A,[EFFAREA,1,True])
-        save_obj(path,tab_detections_out)
         
-    
+        save_obj(path,tab_detections_out)
+        if config['debug']:
+            save_obj(path_i,image_storage)
+            
+            
+
+    del tab_detections_out
+    #del tab_detections
+    gc.collect()
 
             
-def pipeline(config, output_folder,params_template, bands, dictionary_runs, count, MOF_deep_field,deep_fields_catalog,params_image_sims):
+def pipeline(config, output_folder,params_template, bands, dictionary_runs, count, MOF_deep_field,deep_fields_catalog):
 
     
         if config['MPI']:
@@ -239,12 +181,12 @@ def pipeline(config, output_folder,params_template, bands, dictionary_runs, coun
 
         tab = TemplateTable(n = params_template['n'],
                        sigma = params_template['sigma'],
-                        sn_min = 0.,#self.params['sn_min'], 
-                        sigma_xy = 0.,#self.params['sigma_xy'], 
-                        sigma_flux = 0.,#self.params['sigma_flux'], 
-                        sigma_step = 0.,#self.params['sigma_step'], 
-                        sigma_max = 0.,#self.params['sigma_max'],
-                        xy_max = 0.)#self.params['xy_max'])
+                        sn_min = 0.,
+                        sigma_xy = 0.,
+                        sigma_flux = 0.,
+                        sigma_step = 0.,
+                        sigma_max = 0.,
+                        xy_max = 0.)
 
         tab_detections = DetectionsTable(params_template)
 
@@ -270,7 +212,6 @@ def pipeline(config, output_folder,params_template, bands, dictionary_runs, coun
             
         # loads MOF ********
         if MOF_deep_field is not None:
-            print ('radius weird testing') 
             tab_detections.add_MOF_models(MOF_deep_field)
         
             # this checks if anything has been dropped from the fiducial deep field catalog
@@ -283,58 +224,35 @@ def pipeline(config, output_folder,params_template, bands, dictionary_runs, coun
             for d in discard:
                 if (tab_detections.images[d].flags == 0):
                     tab_detections.images[d].flags = 10
-            print ('using {0}/{1}'.format(len(np.array(tab_detections.ID_array))-len(discard),len(np.array(tab_detections.ID_array))))
+            using = len(np.array(tab_detections.ID_array))-len(discard)
+            print ('using {0}/{1}'.format(using,len(np.array(tab_detections.ID_array))))
             
-            # flaggin out stuff with a given radius *******
-            the_same = True
-            x = np.array(np.array(uu_.ra))*3600.
-            y = np.array(np.array(uu_.dec))*3600.
-            indexes_final = x==x
-            print (len(x))
-            config['radius_blends_templates'] =2.
-            count_t = 0
-
-            while the_same:
-                catalog = SkyCoord(ra=x*uu.arcsec, dec=y*uu.arcsec)  
-                idx, d2d, d3d = catalog.match_to_catalog_sky(catalog, nthneighbor=2) 
-                dist_pix = np.sqrt((x-x[idx])**2+(y-y[idx])**2)
-                # creating index pairs
-
-                dist_t = config['radius_blends_templates']
-                # unique pairs of close obj.
-                vv = np.vstack([idx[dist_pix<dist_t],np.arange(len(idx))[dist_pix<dist_t]]).T
-                vv_ = []
-                if len(vv)>2:
-                    for v in vv:
-                        vv_.append(np.sort(v))
-                    idx_close_pairs = np.unique(np.array((vv_))[:,0])
-                else:
-                    idx_close_pairs=-1
-            #
-                indexes_unique = ~np.in1d(np.arange(len(x)),idx_close_pairs)
-            #
-                indexes_final[indexes_final] = indexes_final[indexes_final] & indexes_unique
-            #
-                if (len(x)==len(x[indexes_unique])):
-                    the_same = False
-                else:
-                    x = x[indexes_unique]
-                    y = y[indexes_unique]
-                count_t+=1
-                if count_t>100:
-                    print ('stuck') 
+            if using != 0:        
+                # flaggin out stuff with a given radius *******
+                the_same = True
+                x = np.array(np.array(uu['ra']))*3600.
+                y = np.array(np.array(uu['dec']))*3600.     
+ 
+                mask_too_close = select_obj(x,y,config['radius_blends_templates'])
 
 
 
+                #all_indexes = np.arange(len(tab_detections.images))
 
-            all_indexes = np.arange(len(tab_detections.images))
-            too_close = all_indexes[~np.in1d(all_indexes,np.array(uu_.pos)[indexes_final])]
-            for d in too_close:
-                if (tab_detections.images[d].flags == 0):
-                    tab_detections.images[d].flags = 10
+
+
+                all_indexes = np.arange(len(tab_detections.images))
+                too_close = all_indexes[~np.in1d(all_indexes,np.array(uu.pos)[mask_too_close])]
+                for d in too_close:
+                    if (tab_detections.images[d].flags == 0):
+                        tab_detections.images[d].flags = 10
+                        
+            del df1
+            del df2
+            del uu
+            gc.collect()
         
-        #total_ob = np.min([config['max_target_per_tile'],m_array[0].size])
-        
+
         # division in chunks *********
         print ('division in chunks')
         len_file = np.min([m_array[0].size,config['max_target_per_tile']])
@@ -346,23 +264,90 @@ def pipeline(config, output_folder,params_template, bands, dictionary_runs, coun
         
         del MOF_deep_field
         del deep_fields_catalog
+
         gc.collect()
-            # if it's an image sims run, load the MOF parameters for PSF and galaxies.
-        params_image_sims = dict()
-        if config['setup_image_sims']:
-            params_image_sims = np.load(config['simulated_templates'],allow_pickle='TRUE').item()
-        print ('Doing simulated images, number of replicas: ',config['number_of_replicas'])  
-        #f(0, config = config,params_template = params_template,chunk_size=chunk_size,tab_detections = tab_detections, dic = dictionary_runs, bands = config['bands'], len_file = len_file,runs = runs,output_folder = output_folder, tile = tile,params_image_sims=params_image_sims)
+        if not os.path.exists(output_folder+'/templates/'+'/templates_'+tile+'.pkl'):
 
-        #pool = multiprocessing.Pool(processes=config['agents_chunk'])
-        
-        #_ = pool.map(partial(f, config = config,params_template = params_template,chunk_size=chunk_size,tab_detections = tab_detections, dic = dictionary_runs, bands = config['bands'], len_file = len_file,runs = runs,output_folder = output_folder, tile = tile,params_image_sims=params_image_sims), xlist)
-        for i in xlist:
-            print (i)
-            f(i, config = config,params_template = params_template,chunk_size=chunk_size,tab_detections = tab_detections, dic = dictionary_runs, bands = config['bands'], len_file = len_file,runs = runs,output_folder = output_folder, tile = tile,params_image_sims=params_image_sims)
+            if config['agents_chunk']>1:
+                pool = multiprocessing.Pool(processes=config['agents_chunk'])
+
+                _ = pool.map(partial(f, config = config,params_template = params_template,chunk_size=chunk_size,tab_detections = copy.deepcopy(tab_detections), dic = dictionary_runs, bands = config['bands'], len_file = len_file,runs = runs,output_folder = output_folder, tile = tile), xlist)
 
 
+            else:
+                for i in xlist:
+                    f(i, config = config,params_template = params_template,chunk_size=chunk_size,tab_detections = copy.deepcopy(tab_detections), dic = dictionary_runs, bands = config['bands'], len_file = len_file,runs = runs,output_folder = output_folder, tile = tile)
+                    
+                    
+            for ii_, index in enumerate(range(len(tab_detections.images))):
+                try:
+                    del tab_detections.images[index].MOF_models    
+                except:
+                    pass
+            del tab_detections
+            gc.collect()
 
+                    
+            
+            # clean up and merge ----
+            files = glob.glob(output_folder+'/templates/'+'/templates_'+tile+'*')
+
+            save__ = dict()
+            count = 0
+    
+
+            for file in files:
+
+                tub = load_obj(file.split('.pkl')[0])
+                for index in range(len(tub.images)):  
+                
+
+                    cc = False
+                    try:
+                    #if 1==1:
+                        mom = tub.images[index].moments.get_moment(0.,0.)
+                        if (mom.even ==  mom.even)[0]:
+                            cc = True
+                    except:
+                    #    print ('not a valid measurement')
+                        pass
+                    if cc:
+
+                        count +=1
+                        save__[index] = dict()
+                        save__[index]['moments'] = tub.images[index].moments
+                        save__[index]['index_gal'] = tub.images[index].image_ID[0]
+                        save__[index]['index'] = tub.images[index].image_ID[0]
+                        try:
+                            save__[index]['MOF_index'] = tub.images[index].MOF_index
+                            save__[index]['MAG_I'] = tub.images[index].MAG_I
+                            save__[index]['tilename'] = tub.images[index].TILENAME                
+                        except:
+                            pass
+                        try:
+                            save__[index]['ra'] = tub.images[index].image_ra[0]
+                            save__[index]['dec'] = tub.images[index].image_dec[0]
+                        except:
+                            pass
+                del tub
+                gc.collect()
+                os.remove(file)
+            #print (output_folder+'/templates/'+'/templates_'+tile)
+            save_obj(output_folder+'/templates/'+'/templates_'+tile,save__)
+            del save__
+            gc.collect()
+
+            files = glob.glob(output_folder+'/templates/'+'/Atemplates_'+tile+'*')
+            count = 0
+            for ff in files:
+                m = load_obj(ff.split('.pkl')[0])
+                count += m[0]
+
+                os.remove(ff)
+
+            #print (output_folder+'/templates/'+'/Atemplates_'+tile)
+            save_obj(output_folder+'/templates/'+'/Atemplates_'+tile,[count,m[1] ,m[2]])  
+            print ('done')
 
 
 
@@ -373,6 +358,8 @@ def measure_moments_templates(output_folder,**config):
     It computes the moments from des y6 deef fields tiles.
     '''
     
+    
+    
     # Read the config file
     print ('Executing the measure_moments_templates stage')
     config['output_folder'] = output_folder
@@ -381,8 +368,7 @@ def measure_moments_templates(output_folder,**config):
     detections contained in the single-exposure meds files.
     '''
     
-    config['g1'] =[0.,0.]
-    config['g2'] =[0.,0.]
+
     deep_fields_catalog_u = pf.open(config['deep_fields_catalog'])
     deep_fields_catalog = pd.DataFrame.from_dict({'ra':np.array(deep_fields_catalog_u[1].data['RA']).byteswap().newbyteorder(),
                                                   'dec':np.array(deep_fields_catalog_u[1].data['DEC']).byteswap().newbyteorder(),
@@ -395,8 +381,8 @@ def measure_moments_templates(output_folder,**config):
 
     # config for computation of moments
     params_template = {}
-    params_template['n'] = config['n'] # 4 default. KSigmaWeight function index   
-    params_template['sigma'] = config['sigma'] # sigma KSigmaWeight         
+    params_template['n'] = config['n'] 
+    params_template['sigma'] = config['sigma'] 
 
     
     mute_b = dict()
@@ -415,7 +401,7 @@ def measure_moments_templates(output_folder,**config):
         
     # read MOF deep fields tiles
     if config['MOF_subtraction']:
-        MOF_deep_field = MOF_table(config['shredder'])
+        MOF_deep_field = MOF_table(config['MOF_models'])
     else:
         MOF_deep_field = None
         
@@ -439,22 +425,20 @@ def measure_moments_templates(output_folder,**config):
 
     print ('Number of tiles: ',len(dictionary_runs.keys()))
     
+    
+    
+    
     #check if it has already been run:
     if not os.path.exists(output_folder+'/templates/'):
         try:
             os.mkdir(output_folder+'/templates/')
         except:
             pass
-    if config['setup_image_sims']:
-        mask = np.array([not os.path.exists(output_folder+'/templates/'+'/IS_templates_'+ff+'.pkl') for ff in list(dictionary_runs.keys())])
-    else:
-        mask = np.array([not os.path.exists(output_folder+'/templates/'+'/templates_'+ff+'.pkl') for ff in list(dictionary_runs.keys())])
+        
+        
+    mask = np.array([not os.path.exists(output_folder+'/templates/'+'/templates_'+ff+'.pkl') for ff in list(dictionary_runs.keys())])
         
 
-    params_image_sims = dict()
-    if config['setup_image_sims']:
-        params_image_sims = np.load(config['simulated_templates'],allow_pickle='TRUE').item()
-            
     run_count = 0
     list_run= np.arange(len(list(dictionary_runs.keys())))[mask]
     print ('Number of tiles to be run : ',len(list_run))
@@ -463,18 +447,33 @@ def measure_moments_templates(output_folder,**config):
     
 
                 
-    print (len(list_run))
-    while run_count<len(list_run):
-        comm = MPI.COMM_WORLD
-        if  run_count+comm.rank<len(list_run):
-            print("Hello! I'm rank %d from %d running in total..." % (comm.rank, comm.size))
-            print (list_run[(run_count+comm.rank)])
-            pipeline(config, output_folder, params_template, bands, dictionary_runs, list_run[(run_count+comm.rank)],MOF_deep_field,deep_fields_catalog,params_image_sims)
-   
-        run_count+=comm.size
-        comm.bcast(run_count,root = 0)
-        comm.Barrier() 
+    if config['MPI']:
+        while run_count<len(list_run):
+            comm = MPI.COMM_WORLD
+            if  run_count+comm.rank<len(list_run):
+                try:
+                    pipeline(config, output_folder, params_template, bands, dictionary_runs, list_run[(run_count+comm.rank)],MOF_deep_field,deep_fields_catalog)
+                except:
+                    pass
+            run_count+=comm.size
+            comm.bcast(run_count,root = 0)
+            comm.Barrier() 
+    else:
+        while run_count<len(list_run):
+      
+            if  run_count<len(list_run):
+                try:
+                    pipeline(config, output_folder, params_template, bands, dictionary_runs, list_run[(run_count)],MOF_deep_field,deep_fields_catalog)
+                except:
+                    pass
+            run_count+=1
+       
 
+
+    del deep_fields_catalog_u
+    del deep_fields_catalog
+    del MOF_deep_field
+    gc.collect()
         
         
         
