@@ -90,11 +90,45 @@ def produce_mf(t):
     return t[1].data['moments'][:,0]
 
 def make_targets(output_folder,**config):
+    
+    try:
+        config['classes']
+    except:
+        print ('setting number of classes to default (7)')
+        config['classes'] = 7
+        
+    try:
+        config['re_run_noisetiers']
+    except:
+        config['re_run_noisetiers'] = True
+        
+    try:
+        config['noiseStep']
+    except:
+        config['noiseStep'] = 0.2
+    try:
+        config['psfStep']
+    except:
+        config['psfStep'] = 0.1
+    try:
+        config['match_to_gold']
+    except:
+        config['match_to_gold'] = False
+    doit=False
     if config['MPI']:
         from mpi4py import MPI 
-    comm = MPI.COMM_WORLD
-    run_count =0
-    if comm.rank==0:
+        
+        comm = MPI.COMM_WORLD
+        run_count =0
+        
+        if comm.rank==0:
+            doit=True
+    else:
+        doit = True
+        
+        
+    if doit:
+        
         
         # the code needs to read in all the fits files, assign noisetiers, and save the final target file.
         # It distinguishes between image sims files and normal files.
@@ -118,7 +152,7 @@ def make_targets(output_folder,**config):
                 if not os.path.exists(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add)):
                     # read all the target files 
                     files = glob.glob(output_folder+'/targets/{1}{0}*.fits'.format(tt,add))
-                
+
                     if add =='ISp_':
                         files = files_simulated_p
                     if add =='ISm_':
@@ -130,74 +164,68 @@ def make_targets(output_folder,**config):
                     if len(files)>0:
                         run_count = 0
 
-
-
                         hdulist = pf.HDUList([pf.PrimaryHDU()])
-                        # assign noisetiers **********************************************************************
-                        file_removed = False
+                        mute = pf.open(files[0])
+                        names = [mute[1].columns[i].name for i in range(len(mute[1].columns))]
+                        
+                        
+                        results_ = dict()
 
                         for ii in frogress.bar(range(len(files))):
                             file = files[ii]
-                            try:
-                                mute = pf.open(file)
-                            except:
-                                os.remove(file)
-                                file_removed = True
-                            if ii ==0:
-                                occ  = mute[1].data['covariance'][:,0]
-                                mf  = mute[1].data['moments'][:,0]
-                            else:
-                                occ = np.hstack([occ,mute[1].data['covariance'][:,0]])
-                                mf = np.hstack([mf,mute[1].data['moments'][:,0]])
-                        if file_removed:
-                            print ('Need to re-run measure targets.')
-                            sys.exit()
-
-                        # check if there're NaN (it can happen when simulatin images)
-                        mask= (~np.isnan(occ)) & (occ>0.) & (~np.isnan(mf)) #& (noisetier == NOISE_TIER_MASK)
-
+                            mute = pf.open(file)
+                            for cname in mute[1].columns.names:
+                                if ii == 0:
+                                    results_[cname] = mute[1].data[cname]
+                                else:
+                                    try:
+                                        results_[cname] = np.vstack([results_[cname],mute[1].data[cname]])
+                                    except:
+                                        results_[cname] = np.hstack([results_[cname],mute[1].data[cname]])
+                        mask =( ~np.isnan(results_['covariance'][:,0]))& (results_['covariance'][:,0]>0.) 
+                        if config['match_to_gold']:
+                            gold =  np.load('/global/cfs/cdirs/des/BFD_Y6/gold_id.npy',allow_pickle=True)
+                            match = np.in1d(results_['id'],gold)
+                            mask = mask & match
+                                    
+                    
                         print (len(mask[mask]),len(mask))
-                        # First we're going to create a table the concatenates all the current tables
-                        cols = [] 
-
-                        names = [mute[1].columns[i].name for i in range(len(mute[1].columns))]
+                        # match to gold if needed:
+                        
+                        cols = []
                         if not ('AREA' in names):
-                            cols.append(pf.Column(name="AREA",format="K",array=0*np.ones_like(mask)))#noisetier[mask]*np.ones_like(noisetier[mask])))
-
-
-                        cols.append(pf.Column(name="NOISETIER",format="K",array=0*np.ones_like(mask)))#noisetier[mask]*np.ones_like(noisetier[mask])))
+                            cols.append(pf.Column(name="AREA",format="K",array=0*np.ones_like(mask[mask])))
+                        cols.append(pf.Column(name="NOISETIER",format="K",array=0*np.ones_like(mask[mask])))
+                        
                         new_cols = pf.ColDefs(cols)
-                        hdu = pf.BinTableHDU.from_columns(mute[1].columns + new_cols)
-                        hdu.data['NOISETIER'][~mask] = -1
-
-                        #except:
-                        #    pass
+                        hdu = pf.BinTableHDU.from_columns(mute[1].columns+new_cols)
+             
+            
                         for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
                             hdu.header[key] = mute[0].header[key]
-                        for cname in mute[1].columns.names:
-                            sofar = 0
-                            for ii, file in enumerate(files):
-                                mute = pf.open(file)
-                                mask =( ~np.isnan(mute[1].data['covariance'][:,0]))& (mute[1].data['covariance'][:,0]>0.) & ( ~np.isnan(mute[1].data['moments'][:,0]))
+                        
+                        for cname in results_.keys():
+                            hdu.data[cname] = results_[cname][mask]
 
-                                nlost+=len(mask[~mask])
-                                nn = len(mask)
-                                hdu.data[cname][sofar:sofar+nn] = mute[1].data[cname]
-                                sofar += nn  
 
                                 
-                        mask= (~np.isnan(occ)) & (occ>0.) & (~np.isnan(mf)) #& (noisetier == NOISE_TIER_MASK)
+                        #mask= (~np.isnan(occ)) & (occ>0.) & (~np.isnan(mf)) & match#& (noisetier == NOISE_TIER_MASK)
+                        
+                        
+  
                         
                         #I think we can assign random values that are different from nan here ****
-                        indx_ = np.arange(hdu.data['covariance'].shape[0])[mask]
-                        indx = indx_[np.random.randint(0,len(indx_),len(mask[~mask]))]
-                        hdu.data['covariance'][~mask,:] = hdu.data['covariance'][indx,:]
+                        #####indx_ = np.arange(hdu.data['covariance'].shape[0])[mask]
+                        #####indx = indx_[np.random.randint(0,len(indx_),len(mask[~mask]))]
+                        #####hdu.data['covariance'][~mask,:] = hdu.data['covariance'][indx,:]
 
-                        if 1 ==1:
-                            mask__ = (~mask) 
-                            hdu.data['moments'][mask__,:] = 0.
-                            #hdu.data['covariance'][mask__,:] = 1. # I think we can assign random values that are different from nan here ****
-                            hdu.data['AREA'][mask__] = -1.
+                        ######if 1 ==1:
+                        ######    mask__ = (~mask) 
+                        ######    hdu.data['moments'][mask__,:] = 0.
+                        ######    #hdu.data['covariance'][mask__,:] = 1. # I think we can assign random values that are different from nan here ****
+                        ######    hdu.data['AREA'][mask__] = -1.
+                        ######    
+                        
     
                         for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
                             hdulist[0].header[key] = mute[0].header[key]
@@ -214,8 +242,7 @@ def make_targets(output_folder,**config):
                                 hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add),clobber = True)# 
                             except:
                                 pass
-
-
+    
         # MAKE NOISE TIERS *******************************************************************************
         
 
@@ -233,11 +260,15 @@ def make_targets(output_folder,**config):
         print ('')
         print (filex)
         print ('')
+
         
-        
-        if os.path.exists(output_folder+'/noisetiers.fits'):
-            os.remove(output_folder+'/noisetiers.fits')
-        os.system('python createTiers.py {0} --snMin {1} --snMax  {2} --fluxMin {3} --fluxMax {4} --output {5}'.format(filex,config['sn_min'],config['sn_max'],config['Mf_min'],config['Mf_max'],output_folder+'/noisetiers.fits'))
+        if config['re_run_noisetiers']:
+            if os.path.exists(output_folder+'/noisetiers.fits'):
+                os.remove(output_folder+'/noisetiers.fits')
+            os.system('python BFD_pipeline/createTiers.py {0} --snMin {1} --snMax  {2} --fluxMin {3} --fluxMax {4} --noiseStep {6} --psfStep {7} --output {5}'.format(filex,config['sn_min'],config['sn_max'],config['Mf_min'],config['Mf_max'],output_folder+'/noisetiers.fits',config['noiseStep'],config['psfStep']))
+        else:
+            if not os.path.exists(output_folder+'/noisetiers.fits'):
+                os.system('python BFD_pipeline/createTiers.py {0} --snMin {1} --snMax  {2} --fluxMin {3} --fluxMax {4}  --noiseStep {6} --psfStep {7}  --output {5}'.format(filex,config['sn_min'],config['sn_max'],config['Mf_min'],config['Mf_max'],output_folder+'/noisetiers.fits',config['noiseStep'],config['psfStep']))
         
         # ASSIGN NOISE TIERS ********************
         from bfd import TierCollection
@@ -417,6 +448,6 @@ def make_targets(output_folder,**config):
                             pass
           
         
-        
-    comm.bcast(run_count,root = 0)
-    comm.Barrier() 
+    if config['MPI']:
+        comm.bcast(run_count,root = 0)
+        comm.Barrier() 

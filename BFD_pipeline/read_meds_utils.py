@@ -28,6 +28,49 @@ spline_interp_flags = np.sum([1,2,16,64,1024,2048])
 noise_interp_flags  = np.sum([4,8,128,256,512])
 bad_flags = spline_interp_flags | noise_interp_flags
 
+
+def check_mask_and_interpolate(image,bmask):
+
+    bmask |= np.rot90(bmask)
+    bad_mask = (bmask & bad_flags) != 0
+
+    nbad = 0
+    if np.any(bad_mask):
+
+        nbad = bad_mask.sum()
+        #print ('')
+        #print (nbad,bad_mask.shape)
+        #print ('')
+        bad_pix, good_pix, good_im, good_ind = _get_nearby_good_pixels(image, bad_mask, nbad)
+
+        gi, ind = np.unique(good_ind, return_index=True)
+        good_pix = good_pix[ind, :]
+
+
+        good_im = good_im[ind]
+
+        try:
+            img_interp = CloughTocher2DInterpolator(
+            good_pix,
+            good_im,
+            fill_value=0.0,
+                )
+        except:
+            return image,0
+
+
+        interp_image = image.copy()
+        interp_image = image.copy()
+        interp_image[bad_mask] = img_interp(bad_pix)
+
+        if interp_image is None:
+            return image,0
+        return interp_image,nbad
+    else:
+        return image,0
+
+            
+            
 class BandInfo:
     def __init__(self, weight=1., index=0):
         self.weight = float(weight)
@@ -286,52 +329,13 @@ class Image:
                 maskarr[~mask] = 0
                 maskarr[3:-3,3:-3]=0
                 v = self.imlist[b][i][np.where(maskarr==1)]
-                if len(v>50): # at least 50 pixels...
+                if len(v>50): # at least 50 pixels... if not these are masked anywa
                     correction = np.median(v)
                     self.imlist[b][i] -= correction
                 
-    def deal_with_bmask(self, use_COADD_only = False):
-        def check_mask_and_interpolate(image,bmask):
-            
-            bmask |= np.rot90(bmask)
-            bad_mask = (bmask & bad_flags) != 0
-           
-            if np.any(bad_mask):
                 
-                nbad = bad_mask.sum()
-                #print ('')
-                #print (nbad,bad_mask.shape)
-                #print ('')
-                bad_pix, good_pix, good_im, good_ind = _get_nearby_good_pixels(image, bad_mask, nbad)
-        
-                gi, ind = np.unique(good_ind, return_index=True)
-                good_pix = good_pix[ind, :]
                 
-              
-                good_im = good_im[ind]
-                
-                try:
-                    img_interp = CloughTocher2DInterpolator(
-                    good_pix,
-                    good_im,
-                    fill_value=0.0,
-                        )
-                except:
-                    return image
-                    
-                    
-                interp_image = image.copy()
-                interp_image = image.copy()
-                interp_image[bad_mask] = img_interp[0](bad_pix)
-
-                if interp_image is None:
-                    return image
-                return interp_image
-            else:
-                return image
-
-
-         
+    def deal_with_bmask(self, use_COADD_only = False):        
         for b in range(len(self.bands)):
             if use_COADD_only:
                 start = 0
@@ -340,7 +344,7 @@ class Image:
                 start = 1
                 end = self.ncutout[b]            
             for i in range(start, end):  
-                self.imlist[b][i] = copy.copy(check_mask_and_interpolate(self.imlist[b][i],self.masklist[b][i]))
+                self.imlist[b][i],_ = copy.copy(check_mask_and_interpolate(self.imlist[b][i],self.masklist[b][i]))
 
 
     def compute_mfrac(self):
@@ -2183,3 +2187,18 @@ def select_obj(x,y,radius):
 
     return mask
  
+    
+    
+def subtract_background_(image, seg, mask_):
+    # excludes masked pixels and pixels where objects are detected
+    mask = (seg == 0) & (mask_ == 0) 
+    maskarr=np.ones(np.shape(mask),dtype='int')
+    maskarr[~mask] = 0
+    maskarr[3:-3,3:-3]=0
+    v = image[np.where(maskarr==1)]
+    if len(v>50): # at least 50 pixels...
+        correction = np.median(v)
+    else:
+        correction = 0.
+    return correction
+                    

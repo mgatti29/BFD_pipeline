@@ -28,12 +28,15 @@ import timeit
 import copy
 import frogress
 import scipy
-
+import h5py as h5
 import copy
 import numpy as np
 from bfd import TierCollection
 import numpy as np
 from bfd import Moment
+import gc
+import pandas as pd
+
 
 def select_obj_w(new_DV,even,odd,radius):
     
@@ -206,145 +209,125 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
            # try:
             cumulative_weight = 0
             cumulative_weight1 = 0
-            if 1==1:
-                templates = []
-                count = 0
-                count_g = 0
-                print ('number of entries: ', len(save_.keys()))
 
-                #for i in range(len(tab_mute.images)):
-                # downsample
+            templates = []
+            count = 0
+            count_g = 0
+            print ('number of entries: ', len(save_.keys()))
+
+            #for i in range(len(tab_mute.images)):
+            # downsample
+
+            try:
+
+                downsample_factor = config['downsample_factor']
+                downsample = np.int(len(save_.keys())*downsample_factor)
+            except:
+                downsample = len(save_.keys())
+                downsample_factor=1.
+
+
+            for i_ in frogress.bar(range( np.int(len(save_.keys())*downsample_factor))):
+
+                i = list(save_.keys())[i_]
+
+
+
+                start = timeit.default_timer()
+                #update_progress(1.*i/(len(tab_mute.images)),timeit.default_timer(),start)           
+                cc = False
 
                 try:
+                #if 1==1:
+                    #mom = tab_mute.images[i].moments.get_moment(0.,0.)
+                    mom = save_[i]['moments'].get_moment(0.,0.)
 
-                    downsample_factor = config['downsample_factor']
-                    downsample = np.int(len(save_.keys())*downsample_factor)
+                    if overview_data:
+                        idx = np.in1d(idverview,save_[i]['index_gal'])
+                        if wverview[idx]>0:
+                            w_ = wverview[idx][0]
+                            cc =True
+
+                            mom.even = templates_overview[1].data['average_moments'][idx,:][0]
+                            mom.odd = templates_overview[1].data['average_moments_odd'][idx,:][0]
+                        else:
+                            cc =False
+
+
+
+                    else:
+                        mom = save_[i]['moments'].get_moment(0.,0.)
+                        w_ = 1.
+                        cc = True
                 except:
-                    downsample = len(save_.keys())
-                    downsample_factor=1.
+                #    print ('not a valid measurement')
+                    pass
+                if cc:
+                    #print (i)
+                    #mom = tab_mute.images[i].moments.get_moment(0.,0.)
+                    #
+
+                    count_g +=1
+
+                    Mf = mom.even[mom.M0]
+                    #print ('Mf ', Mf)
+                    SN_mute = Mf/np.sqrt(save_[i]['moments'].get_covariance()[0][mom.M0,mom.M0])
+                    mask_bool = True
 
 
-                for i_ in frogress.bar(range( np.int(len(save_.keys())*downsample_factor))):
-
-                        i = list(save_.keys())[i_]
-
-
-
-                        start = timeit.default_timer()
-                        #update_progress(1.*i/(len(tab_mute.images)),timeit.default_timer(),start)           
-                        cc = False
-
-                        try:
-                        #if 1==1:
-                            #mom = tab_mute.images[i].moments.get_moment(0.,0.)
-                            mom = save_[i]['moments'].get_moment(0.,0.)
+                    if limits['SN_Mf_min'] > SN_mute: 
+                        #print ('not passing SN min')
+                        mask_bool = False
+                    if limits['SN_Mf_max'] < SN_mute: 
+                        #print ('not passing SN maxx')
+                        mask_bool = False
+                    if limits['Mf_min'] > Mf: 
+                        #print ('not passing Mf_min')
+                        mask_bool = False
+                    if limits['Mf_max'] < Mf: 
+                        #print ('not passing Mf_max')
+                        mask_bool = False
+                    if mask_bool:
+                            cumulative_weight1 += w_ 
+                            #print (i)
+                            t = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
+                            ID_mute = copy.copy(save_[i]['index'])
+                            ID_gal = copy.copy(save_[i]['index_gal'])
 
                             if overview_data:
-                                idx = np.in1d(idverview,save_[i]['index_gal'])
-                                #idx = np.in1d(mfverview,mom.even[mom.M0])
-                                #print ('--- idxx:',idverview[idx],save_[i]['index'])
-                                
-                                #print ('--- moments:',mom.even[mom.M0], templates_overview[1].data['moments'][idx,:][0])
-                                # this has to check aginst the index ---
-                                
-                                
-                                #print (wverview[idx],idverview[idx],i,save_[i]['index'])
-                                if wverview[idx]>0:
-                                    w_ = wverview[idx][0]
-                                    cc =True
-    
-                                    mom.even = templates_overview[1].data['average_moments'][idx,:][0]
-                                    
-                                    mom.odd = templates_overview[1].data['average_moments_odd'][idx,:][0]
-                                else:
-                                    cc =False
-
-
-                        
+                                class_ = class_w[idx]
                             else:
-                                mom = save_[i]['moments'].get_moment(0.,0.)
-                                w_ = 1.
-                                cc = True
-                        except:
-                        #    print ('not a valid measurement')
-                            pass
-                        if cc:
-                            #print (i)
-                            #mom = tab_mute.images[i].moments.get_moment(0.,0.)
-                            #
-                            
-                            count_g +=1
+                                class_ = '-100_-100_-100'
 
-                            Mf = mom.even[mom.M0]
-                            #print ('Mf ', Mf)
-                            SN_mute = Mf/np.sqrt(save_[i]['moments'].get_covariance()[0][mom.M0,mom.M0])
-                            mask_bool = True
+                            gc.collect()
+                            try:
+                                p0 = save_[i]['p0']
+                                p0_PSF = save_[i]['p0_PSF']
 
+                            except:
 
-                            if limits['SN_Mf_min'] > SN_mute: 
-                                #print ('not passing SN min')
-                                mask_bool = False
-                            if limits['SN_Mf_max'] < SN_mute: 
-                                #print ('not passing SN maxx')
-                                mask_bool = False
-                            if limits['Mf_min'] > Mf: 
-                                #print ('not passing Mf_min')
-                                mask_bool = False
-                            if limits['Mf_max'] < Mf: 
-                                #print ('not passing Mf_max')
-                                mask_bool = False
-                            if mask_bool:
-                                    cumulative_weight1 += w_ 
-                                    #print (i)
-                                    t = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
-                                    ID_mute = copy.copy(save_[i]['index'])
-                                    ID_gal = copy.copy(save_[i]['index_gal'])
-                                    
-                                    if overview_data:
-                                        class_ = class_w[idx]
-                                    else:
-                                        class_ = '-100_-100_-100'
-                                        
-                                    gc.collect()
-                                    try:
-                                        p0 = save_[i]['p0']
-                                        p0_PSF = save_[i]['p0_PSF']
+                                p0 = 0
+                                p0_PSF = 0
 
-                                    except:
+                            if t[0] is None:
+                                continue
+                            else:   
+                                for tmpl in t:
+                                    count +=1
+                                    tmpl.p0 = p0
+                                    tmpl.p0_PSF = p0_PSF
+                                    tmpl.id = ID_mute
+                                    tmpl.id_gal = ID_gal
+                                    tmpl.class_ = class_
+                                    tmpl.nda *= w_/downsample_factor
+                                    templates.append(tmpl)
+                                    #print ('---- w', tmpl.nda)
+                                    cumulative_weight +=  tmpl.nda
 
-                                        p0 = 0
-                                        p0_PSF = 0
+            save_obj(output_folder+'/templates/templates_junk/templates_{0}_{1}'.format(t_index,d_index),templates)
 
-                                    if t[0] is None:
-                                        continue
-                                    else:   
-                                        for tmpl in t:
-                                            count +=1
-                                            tmpl.p0 = p0
-                                            tmpl.p0_PSF = p0_PSF
-                                            tmpl.id = ID_mute
-                                            tmpl.id_gal = ID_gal
-                                            tmpl.class_ = class_
-                                            tmpl.nda *= w_/downsample_factor
-                                            templates.append(tmpl)
-                                            #print ('---- w', tmpl.nda)
-                                            cumulative_weight +=  tmpl.nda
-                                #except:
-                                #        pass
-
-                                
-                #print ('cumulative weight: ' , cumulative_weight,cumulative_weight1)
-                #print ('templates: ',count, ' from galaxies: ', count_g,t_index, d_index)
-                save_obj(output_folder+'/templates/templates_junk/templates_{0}_{1}'.format(t_index,d_index),templates)
-               # print ('saved',t_index, d_index)
-                #del template_list
-                del save_
-                gc.collect()
-            #except:
-            #    print ('problems with file ','(IS)_templates_'+d_index)
-            #except:
-            #    print ('failed ',d_index)
-#
+            del save_
+            gc.collect()
 
 
         
@@ -352,11 +335,22 @@ def make_templates(output_folder,**config):
     if config['MPI']:
         from mpi4py import MPI 
     print ('making templates')
-
+    try:
+        config['classes']
+    except:
+        config['classes'] = 7
+    try:
+        config['des_y3_match']
+    except:
+        config['des_y3_match'] = False
+    try:
+        config['reduce_input_files']
+    except:
+        config['reduce_input_files'] = False
     if ('compute' in config['stage']) or ('assembly' in config['stage']):
         
         # read list of targets :
-        noise_tier = []
+
         targets_properties = dict()
         
         # need to check if it exists. if it doesn't, exit.
@@ -382,21 +376,8 @@ def make_templates(output_folder,**config):
         # number of entries:
 
         #Let's open the noisetier file.
-        if os.path.exists(output_folder+'/noisetiers.fits'):
-            count = 0
-            reading = True
-            while reading:
-                try:
-                    NT_ = pf.open(output_folder+'/noisetiers.fits')
-                    reading = False
-                except:
-                    time.sleep(10)
-                    count += 1
-                    if count > 6*5:
-                        reading = False
-                        sys.exit()
-                        
-
+        NT_ = pf.open(output_folder+'/noisetiers.fits')
+ 
         noisetier = len(NT_)-1
         t_entries = np.arange(noisetier)
 
@@ -443,7 +424,7 @@ def make_templates(output_folder,**config):
 
 
         run_count = 0
-        print ('runs to do [compute stage]: ',len(runs),' out of: ', len(deep_files)*len(noise_tier))
+        print ('runs to do [compute stage]: ',len(runs),' out of: ', len(deep_files)*(noisetier))
     if 'resume_templates' in config['stage']:   
        
         print ('resume templates')
@@ -505,10 +486,39 @@ def make_templates(output_folder,**config):
                 print (df)
                 
                 
-
+        # match with des y3 catalog ----
+        if config['des_y3_match']:
+            dd = h5.File(config['des_y3_match'])
+            dd = np.array(dd['data']['table'])
+            mask_df = (dd['MASK_FLAGS']==0) & (dd['FLAGS']==0) & (dd['FLAGS_NIR']==0)& (dd['MASK_FLAGS_NIR']==0)  & (dd['KNN_CLASS']==1) #(m['KNN_CLASS']==1)])       
+            #star_galaxy_sep = np.array(moments[:,1])/np.array(moments[:,0])<config['star_galaxy_sep']
+            id_mask = np.in1d(np.array(indexu),dd['ID'][mask_df])
+            
+            moments = np.array(moments)[id_mask,:]
+            moments_odd = np.array(moments_odd)[id_mask,:]
+            error = np.array(error)[id_mask,:]
+            indexu = np.array(indexu)[id_mask]
+            indexu_gal = np.array(indexu)
+            
+            try:
+                mof_index = mof_index[id_mask]
+                ra = ra[id_mask]
+                dec = dec[id_mask]
+                ra_DF = ra_DF[id_mask]
+                dec_DF = dec_DF[id_mask]
+                MAG_I = MAG_I[id_mask]
+                tilename = tilename[id_mask]
+            except:
+                pass
+            try:
+                p0_ = p0_[id_mask]
+                p0_PSF_ = p0_PSF_[id_mask]
+            except:
+                pass
+        
         
         moments = np.array(moments)
-        print (moments.shape)
+
         # Rotate all the templates:
         phi = -0.5*(angle(moments[:,:].T))
         e_,o_ = rotate(moments[:,:].T,moments[:,:2].T,phi)
@@ -589,15 +599,38 @@ def make_templates(output_folder,**config):
 
         # upper cut **
         u,o = bulkUnpack(nt[-1].data['COVARIANCE'][:,:])
-        mask_u = moments[:,0]/np.sqrt(u[1,0,0]) < 70
+        mask_u = moments[:,0]/np.sqrt(u[1,0,0]) < 80
 
         mask_total = mask_u & mask_l & (w>0)
         class_[~mask_total] = '-100_-100_-100'
 
                     
-                    
-                    
+            
 
+        moments = np.array(moments)[mask_total,:]
+        moments_odd = np.array(moments_odd)[mask_total,:]
+        error = np.array(error)[mask_total,:]
+        indexu = np.array(indexu)[mask_total]
+        indexu_gal = np.array(indexu)
+
+        try:
+            mof_index = mof_index[mask_total]
+            ra = ra[mask_total]
+            dec = dec[mask_total]
+            ra_DF = ra_DF[mask_total]
+            dec_DF = dec_DF[mask_total]
+            MAG_I = MAG_I[mask_total]
+            tilename = tilename[mask_total]
+        except:
+            pass
+        try:
+            p0_ = p0_[mask_total]
+            p0_PSF_ = p0_PSF_[mask_total]
+        except:
+            pass
+        class_ = class_[mask_total] 
+        
+        
         '''
         modified save function for moments with different sigma_Mf entries
         '''
@@ -649,8 +682,61 @@ def make_templates(output_folder,**config):
             pass
         
         
-        
-        # make 
+        if config['reduce_input_files']:
+            try:
+                templates_overview = pf.open(output_folder+'/templates_overview.fits')
+                mfverview = templates_overview[1].data['moments'][:,0]
+                idverview = templates_overview[1].data['index_gal']
+                class_w = templates_overview[1].data['class']
+                wverview = templates_overview[1].data['w']
+                overview_data = True
+            except:
+                overview_data = False
+
+            if overview_data:
+                for file in frogress.bar(deep_files):
+                    name = (file.split('.pkl')[0]).split(output_folder+'/templates/')[1]
+                    path = output_folder+'/templates/'
+                    try:
+                        if os.path.exists(path+'old_'+name+'.pkl'):
+                            m = load_obj(path+'old_'+name)
+                        else:
+                            m = load_obj(path+name)
+                        os.system('mv {0} {1}'.format(path+name+'.pkl',path+'old_'+name+'.pkl'))
+                        index_gal = []
+                        for ii in ((m.keys())):
+                            index_gal.append(m[ii]['index_gal'])
+                        index_gal = np.array(index_gal)
+
+
+                        df = pd.DataFrame(data = {'w':wverview.byteswap().newbyteorder()}, index = idverview)
+                        df1 = pd.DataFrame( index = index_gal)
+                        u = df1.join(df,how = 'left',sort=False).dropna()
+                        u = u[u['w']>0]
+                        to_del = np.array(list(m.keys()))[~np.in1d(index_gal,np.array(u.index))]
+                        for i in to_del:
+                            del m[i]
+
+                        save_obj(output_folder+'/templates/'+(file.split('.pkl')[0]).split(output_folder+'/templates/')[1],m)
+
+                        del m
+                        gc.collect()
+                    except:
+                        print ('failed ',path+name)  
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
     
 

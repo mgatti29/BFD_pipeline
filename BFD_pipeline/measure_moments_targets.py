@@ -394,6 +394,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
 
                         if config['interp_masking']:
                             #Interpolates ther images over masked pixels
+                            
                             tab_detections.images[index].deal_with_bmask(use_COADD_only = config['COADD_only'])
 
 
