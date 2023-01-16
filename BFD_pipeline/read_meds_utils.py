@@ -6,7 +6,7 @@ from bfd.momenttable import TemplateTable, TargetTable
 import glob
 import numpy as np
 import pandas as pd
-import pyfits as pf
+import astropy.io.fits as fits
 import ngmix.gmix as gmix
 
 import gc
@@ -30,10 +30,15 @@ bad_flags = spline_interp_flags | noise_interp_flags
 
 
 def check_mask_and_interpolate(image,bmask):
+    
 
+    
     bmask |= np.rot90(bmask)
     bad_mask = (bmask & bad_flags) != 0
 
+    self.images[ii].MOF_model_all_rendered
+    
+    '''
     nbad = 0
     if np.any(bad_mask):
 
@@ -68,8 +73,14 @@ def check_mask_and_interpolate(image,bmask):
         return interp_image,nbad
     else:
         return image,0
+    '''
+    
+    
+        
+        
 
-            
+   
+    
             
 class BandInfo:
     def __init__(self, weight=1., index=0):
@@ -77,6 +88,7 @@ class BandInfo:
         self.index = int(index)
 
 def _get_nearby_good_pixels(image, bad_msk, nbad, buff=4):
+    
     """
     get the set of good pixels surrounding bad pixels.
     Parameters
@@ -196,6 +208,7 @@ class Image:
         self.moments = None
         self.flags = 0
         self.MOF_model_rendered = None
+        self.MOF_model_all_rendered = None
         self.MOF_index = None
         self.verbose = verbose
         
@@ -321,17 +334,44 @@ class Image:
         It re-computes the background in the outermost pixels of the image and subtract it.
         '''
         
+        bkg_tot = 0
+        count = 0
+        len_v = 0
         for b in range(len(self.bands)):
             for i in range((self.ncutout[b])):
-                # excludes masked pixels and pixels where objects are detected
-                mask = (self.seglist[b][i] == 0) & (self.masklist[b][i] == 0) &(self.wtlist[b][i]!=0.)
-                maskarr=np.ones(np.shape(mask),dtype='int')
-                maskarr[~mask] = 0
-                maskarr[3:-3,3:-3]=0
-                v = self.imlist[b][i][np.where(maskarr==1)]
-                if len(v>50): # at least 50 pixels... if not these are masked anywa
-                    correction = np.median(v)
-                    self.imlist[b][i] -= correction
+                
+                
+                    seg = copy.deepcopy(self.seglist[b][i])
+                    segg0 = copy.deepcopy(self.seglist[b][i])
+                    for ii in [-5,-4,-3,-2,-1,0,1,2,3,4,5]:
+                        seg += (np.roll(segg0, ii, axis = 0) + np.roll(segg0, ii, axis = 1))
+
+                    mask__ = copy.deepcopy(self.masklist[b][i] )
+                    segg0 = copy.deepcopy(self.masklist[b][i] )
+                    for ii in [-5,-4,-3,-2,-1,0,1,2,3,4,5]:
+                        mask__ += (np.roll(segg0, ii, axis = 0) + np.roll(segg0, ii, axis = 1))
+
+
+                    mask = (seg == 0) & (mask__ == 0) 
+                    maskarr=np.ones(np.shape(mask),dtype='int')
+                    maskarr[~mask] = 0
+                    uu = 6
+                    maskarr[uu:-uu,uu:-uu]=0
+                    v = self.imlist[b][i][np.where(maskarr==1)]
+
+                    if len(v)>50: 
+                        correction = np.median(v)
+                        self.imlist[b][i] -= correction
+                        bkg_tot += correction
+                        count += 1
+                        len_v = len(v)               
+                        
+        if count ==0:
+            return bkg_tot,100000000000000
+        else:
+            return bkg_tot/count,len_v/count
+                        
+                        
                 
                 
                 
@@ -344,7 +384,20 @@ class Image:
                 start = 1
                 end = self.ncutout[b]            
             for i in range(start, end):  
-                self.imlist[b][i],_ = copy.copy(check_mask_and_interpolate(self.imlist[b][i],self.masklist[b][i]))
+                    
+                bmask = copy.deepcopy(self.masklist[b][i])
+                bmask |= np.rot90(self.masklist[b][i])
+    
+                try:
+                    self.imlist[b][i][bmask!=0] += self.images[ii].MOF_model_all_rendered[b][i][bmask!=0]
+                except:
+                    pass
+                s0 = self.MOF_model_all_rendered[b][i].shape[0]
+                
+                self.imlist[b][i][bmask!=0] += (np.random.normal(size = (s0,s0))/np.sqrt(self.wtlist[b][i]))[bmask!=0]
+                                                                
+                    
+                #self.imlist[b][i],_ = copy.copy(check_mask_and_interpolate(self.imlist[b][i],self.masklist[b][i]))
 
 
     def compute_mfrac(self):
@@ -363,7 +416,7 @@ class Image:
         
         
         # gaussian aperture ****
-        psf_fwhm = 10.
+        psf_fwhm = 2.
         Tpsf = ngmix.moments.fwhm_to_T(psf_fwhm)
 
         psf_pars = [0.0, 0.0, 0.0, 0.00, Tpsf, 1.0]
@@ -601,10 +654,12 @@ class Image:
         
         imgs = []
         wcss = []
+        wcss_psf = []
         psfs = []
         noise = []
         bandlist = []
         psfs_None = []
+        
         for  band in (bands):
             index_band = np.arange(len(self.bands))[np.array(np.in1d(self.bands,band))]
             if len(index_band) == 0:
@@ -626,17 +681,30 @@ class Image:
                         else:
                             img = self.imlist[index_band][exp]
                         imgs.append(img)
-                        try:
-                            wcss.append(self.wcslist[index_band][exp])
-                        except:
-                            print (self.wcslist)
-                            print (index_band,exp)
+                 
+                        
+           
+                        wcss.append(self.wcslist[index_band][exp])
+                            
+
+                        
+
                         psfs.append(self.psf[index_band][exp])
+                        
                         psfn_ = np.zeros_like(self.psf[index_band][exp])
-                        psfn_[len(psfn_)//2,len(psfn_)//2] = 1
+                        # make a wcs for the PSF
+                        origin = (0.,0.)
+                        cent = (len(psfn_)//2,len(psfn_)//2)
+                        duv_dxy = np.array([[self.wcslist[index_band][exp].jac[0,0], self.wcslist[index_band][exp].jac[0,1]],
+                                            [self.wcslist[index_band][exp].jac[1,0], self.wcslist[index_band][exp].jac[1,1]]])
+                        wcs_psf = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
+                        wcss_psf.append(wcs_psf)
+                       
+                        
+                        psfn_[len(psfn_)//2,len(psfn_)//2] = 1.
                         psfs_None.append(psfn_)
                         try:
-                            #diocane
+                       
                             noise_rms = self.noise_rms[index_band][exp]
                         except:
                             noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
@@ -647,12 +715,16 @@ class Image:
                         shap = np.array(self.imlist[index_band][exp].shape)/2.
                         
         kds = bfd.multiImage(imgs, (0,0), psfs, wcss, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
-        kds_PSF = bfd.multiImage(psfs, (0,0), psfs_None, wcss, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
+        
+        #
+        kds_PSF = bfd.multiImage(psfs, (0,0), psfs_None, wcss_psf, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
         
         wt = mc.KSigmaWeight(sigma = sigma) 
  
         mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = band_dict)
         mul_PSF = bfd.MultiMomentCalculator(kds_PSF, wt, bandinfo = band_dict)
+        
+        xyshift_PSF, error_PSF,msg  = mul_PSF.recenter()
         
         self.xyshift, error,msg = mul.recenter()
  
@@ -800,7 +872,7 @@ class MOF_table:
     
         if shredder:
             print (path)
-            self.mof_catalog = pf.open(path)
+            self.mof_catalog = fits.open(path)
             self.id_array = self.mof_catalog[1].data['id']
             self.params = self.mof_catalog[1].data['band_pars']
             self.PSF_params = self.mof_catalog[1].data['band_psf_pars'] #X , 60, 5
@@ -817,7 +889,7 @@ class MOF_table:
             
             
             try:
-                self.mof_catalog = pf.open(path)
+                self.mof_catalog = fits.open(path)
                 
                 try:
                     self.des_id = self.mof_catalog[1].data['des_id']
@@ -841,7 +913,7 @@ class MOF_table:
                 self.numbands = np.shape(self.bdf_mag)[1]
             except:
                 for i, pm in enumerate(path):
-                    self.mof_catalog = pf.open(pm)
+                    self.mof_catalog = fits.open(pm)
                     self.cols = self.mof_catalog[1].data.columns.names
                     if i==0:
 
@@ -1179,6 +1251,9 @@ class DetectionsTable:
         
         ii = index
         MOF_model_rendered = []
+        MOF_model_all_rendered = []
+        
+        
         for b, band in enumerate(self.images[ii].bands):
             
             if use_COADD_only:
@@ -1190,24 +1265,27 @@ class DetectionsTable:
             
             
             mute = []
+            mute_all = []
 
             for i in range(start, end):  
                 rendered_image = np.zeros((self.images[ii].imlist[b][i].shape[0],self.images[ii].imlist[b][i].shape[0]))
-                if render_self:
-                    if self.images[ii].MOF_model_shredder :
-                        wcs,nbrxyref = self.images[ii].make_WCS_2objects(self.images[ii], self.images[ii].bands[b], i,return_shift=True)
-                    else:
-                        wcs = self.images[ii].make_WCS_2objects(self.images[ii], self.images[ii].bands[b], i)
-                 
-                    if self.images[ii].MOF_model_shredder :
-              
-                           
-                        u_,_ = render_gal(self.images[ii].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.,nbrxyref=nbrxyref)
-                    else:
-                        u_,_ = render_gal(self.images[ii].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)
-                        
-              
-                    rendered_image += u_
+                #if render_self:
+                if 1 ==1:
+                    try:
+                        if self.images[ii].MOF_model_shredder :
+                            wcs,nbrxyref = self.images[ii].make_WCS_2objects(self.images[ii], self.images[ii].bands[b], i,return_shift=True)
+                        else:
+                            wcs = self.images[ii].make_WCS_2objects(self.images[ii], self.images[ii].bands[b], i)
+
+                        if self.images[ii].MOF_model_shredder :
+                            m__,jac = render_gal(self.images[ii].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.,nbrxyref=nbrxyref)
+                        else:
+                            m__,jac = render_gal(self.images[ii].MOF_models[band]['gal_pars'],self.images[ii].MOF_models[band]['psf_pars'],wcs,self.images[ii].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)
+
+
+                        self_model = m__
+                    except:
+                        self_model = np.zeros((self.images[ii].imlist[b][i].shape[0],self.images[ii].imlist[b][i].shape[0]))
                 if render_others:
                     # check first list of neighbours in the segmentation map. always use segmap coadd
                 
@@ -1246,8 +1324,11 @@ class DetectionsTable:
                     #except:
                     #    pass
                 mute.append(rendered_image)
+                mute_all.append(rendered_image+self_model)
             MOF_model_rendered.append(mute) 
+            MOF_model_all_rendered.append(mute_all) 
         self.images[ii].MOF_model_rendered = MOF_model_rendered
+        self.images[ii].MOF_model_all_rendered = MOF_model_all_rendered
       
             
             
@@ -1788,6 +1869,7 @@ def save_(self,fitsname,stamp):
         except:
             pass
         
+        print ('SHAPE ', np.array(self.meb).shape,len(self.id))
         col.append(fits.Column(name="Mf_per_band",format="{0}E".format(np.array(self.meb).shape[1]),array=self.meb))
         try:
             col.append(fits.Column(name="true_fluxes",format="{0}E".format(np.array(self.meb).shape[1]),array=self.true_fluxes))
@@ -1863,8 +1945,24 @@ def save_(self,fitsname,stamp):
         if len(self.num_exp) == len(self.id):
             col.append(fits.Column(name="num_exp",format="K",array=self.num_exp))
         if self.cov is not None:
-            col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
+
+            try:
+                cov_ = np.array(self.cov).astype(np.float32)
+                cov_[:,0] *= (1.+1./np.sqrt(self.len_v))**2
+                
+            except:
+                cov_ = np.array(self.cov).astype(np.float32)
+                print ('no COV[0,0] correction')
+            #    
+            col.append(fits.Column(name="covariance",format="15E",array=cov_))
         
+        try:
+            col.append(fits.Column(name="bkg",format="D",array=self.bkg))
+            
+            
+            
+        except:
+            pass
        #if self.cov_even is not None:
        #    # saved in order M0xM0, M0xMR, M0xM1, M0xM2, M0xMC,
        #    # MRxMR, MRxM1, MRxM2, MRxMC, M1xM1, M1xM2, M1xMC,
@@ -2041,7 +2139,8 @@ def initialise_entries(tab_targets):
         tab_targets.cov_odd_per_band = []
         tab_targets.cov_even_per_band = []
         tab_targets.is_it_a_blend = []
-
+        tab_targets.bkg = []
+        tab_targets.len_v = []
         tab_targets.des_id = []
         tab_targets.photoz = []
         return tab_targets
@@ -2189,16 +2288,108 @@ def select_obj(x,y,radius):
  
     
     
-def subtract_background_(image, seg, mask_):
+def subtract_background_(image, seg_, mask_):
     # excludes masked pixels and pixels where objects are detected
-    mask = (seg == 0) & (mask_ == 0) 
+    seg = copy.deepcopy(seg_)
+    segg0 = copy.deepcopy(seg_)
+    for i in [-5,-4,-3,-2,-1,0,1,2,3,4,5]:
+        seg += (np.roll(segg0, i, axis = 0) + np.roll(segg0, i, axis = 1))
+
+    mask__ = copy.deepcopy(mask_)
+    segg0 = copy.deepcopy(mask_)
+    for i in [-5,-4,-3,-2,-1,0,1,2,3,4,5]:
+        mask__ += (np.roll(segg0, i, axis = 0) + np.roll(segg0, i, axis = 1))
+
+        
+    mask = (seg == 0) & (mask__ == 0) 
     maskarr=np.ones(np.shape(mask),dtype='int')
     maskarr[~mask] = 0
-    maskarr[3:-3,3:-3]=0
+    uu = 6
+    maskarr[uu:-uu,uu:-uu]=0
     v = image[np.where(maskarr==1)]
-    if len(v>50): # at least 50 pixels...
+
+    if len(v)>50: # at least 50 pixels...
         correction = np.median(v)
+        return correction,len(v)
     else:
+        
         correction = 0.
-    return correction
+        return correction,0
+    
+                                                                
                     
+def mfrac_(mask_,shape,wcs):                                                             
+    psf_fwhm = 2.
+    Tpsf = ngmix.moments.fwhm_to_T(psf_fwhm)
+
+    psf_pars = [0.0, 0.0, 0.0, 0.00, Tpsf, 1.0]
+    psf_gmix = ngmix.GMixModel(pars=psf_pars, model="turb")
+    
+    jac = jacobian=ngmix.jacobian.Jacobian(row=wcs.xy0[1],
+                          col=wcs.xy0[0],
+                          dudrow=wcs.jac[0,1],
+                          dudcol=wcs.jac[0,0],
+                          dvdrow=wcs.jac[1,1],
+                          dvdcol=wcs.jac[1,0])
+    test_filter = psf_gmix.make_image((shape),jac,fast_exp=True)
+    mfrac = np.sum(test_filter.flatten()[mask_.flatten()!=0.])/np.sum(test_filter).flatten()
+    return mfrac
+def quick_mask_interp(image_sheared,mask,noise_rms):
+    mask |= np.rot90(mask)
+    import shredder
+    import esutil as eu
+    detection_cat, seg_map = sxdes.run_sep(image_sheared, noise_rms)
+    shredder_cat = dict()
+    seed = 113
+    rng = np.random.RandomState(seed)
+    guess_model = 'dev'
+    wmp = np.ones((shape,shape))*1./noise_rms**2
+
+
+    psf_o = ngmix.Observation(im_psf,jacobian=jac)
+
+    mbobs_ = ngmix.Observation(image_sheared,
+            weight=wmp,
+            meta={"orig_row": (shape)/2., "orig_col": (shape)/2.},
+            jacobian=jac,
+            psf=psf_o)
+
+    mbobs_ = ngmix.observation.get_mb_obs(mbobs_)
+
+    dt = np.dtype([('shift', '<f4', (2,)),('flux', 'f4'), ('hlr', 'f4'),('col', 'f4'),('row', 'f4')])
+
+
+    m = []
+    for i in range(len(detection_cat['flux'])):
+        m.append(((0.,0.),detection_cat['flux'][i],
+    detection_cat['flux_radius'][i],
+    detection_cat['x'][i],
+    detection_cat['y'][i]))
+    d_ = np.array([m],dtype=dt)
+
+    objs_ = _add_T_and_scale(d_[0],0.263)#0.263) # 0.263);
+
+    gm_guess = shredder.get_guess(
+        objs_,
+        jacobian=mbobs_[0][0].jacobian,
+        model=guess_model,
+        rng=rng,
+    )
+
+    s = shredder.Shredder(obs=mbobs_, psf_ngauss=2, rng=rng)
+    s.shred(gm_guess)
+    res = s.get_result()
+
+
+    models = s.get_model_images()
+    
+    for i in range(len(models)):
+        if i== 0:
+            mod_tot = models[i]
+        else:
+            mod_tot += models[i]
+
+    image_sheared[mask != 0 ] = mod_tot[mask != 0 ]
+    noise = np.random.normal(size = (image_sheared.shape[0],image_sheared.shape[0]))*noise_rms
+    image_sheared[mask != 0 ] += noise[mask != 0 ]
+    return image_sheared

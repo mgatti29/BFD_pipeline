@@ -1,12 +1,12 @@
 import numpy as np
 
-import pyfits as pf
+
 import os
 import frogress
 import copy
 import math
 import astropy.io.fits as fits
-import pyfits as pf
+
 import frogress
 import multiprocessing
 from functools import partial
@@ -54,7 +54,7 @@ def cpp_part(output_folder,**config):
             path_templates = config['output_folder']
             target = path_templates+'/{0}targets_sample_g.fits'.format(add)
             if os.path.exists(target):
-                targets = pf.open(target)
+                targets = fits.open(target)
                 #print (target)
                 try:
                     noise_tiers = np.array(config['noise_tiers'])
@@ -101,10 +101,10 @@ def cpp_part(output_folder,**config):
 
                     comm = MPI.COMM_WORLD
                     if comm.rank==0:
-                        m = pf.open('{0}/noisetiers.fits'.format(output_folder))
+                        m = fits.open('{0}/noisetiers.fits'.format(output_folder))
                         noise_tiers = np.arange(0,len(noise_tiers))
                         for i_ in range(len(noise_tiers)):
-                            mx = pf.open('{0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[i_]))
+                            mx = fits.open('{0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[i_]))
                             try:
                                 m[i_+1] = mx[i_+1]
                             except:
@@ -115,9 +115,9 @@ def cpp_part(output_folder,**config):
                                 
 
                         prihdu = fits.PrimaryHDU()
-                        u = pf.HDUList([pf.PrimaryHDU()])
+                        u = fits.HDUList([fits.PrimaryHDU()])
                         for i in range(len(m)-1):
-                            u_ = pf.BinTableHDU.from_columns(m[i+1].columns)
+                            u_ = fits.BinTableHDU.from_columns(m[i+1].columns)
                             keys_ = ['TIER_NUM','EXTNAME','COVMXMX','COVMXMY','COVMYMY','SIG_XY','SIG_FLUX','STARTA00','STEPA00','INDEXA00','STARTA01','STEPA01','INDEXA01','MONO_1_0','MONO_1_1','MONO_2_0','MONO_2_1','MONO_3_0','MONO_3_1','ELLIP_1','ELLIP_2','FLUX_MIN','FLUX_MAX','WT_N','WT_SIGMA']
 
                             for k in keys_:
@@ -181,11 +181,11 @@ def cpp_part(output_folder,**config):
                                 cols = [] 
                                 for k in c:
                                     try:
-                                        cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end,:]))
+                                        cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end,:]))
                                     except:
-                                        cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end]))
-                                new_cols = pf.ColDefs(cols)
-                                hdu = pf.BinTableHDU.from_columns(new_cols)
+                                        cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end]))
+                                new_cols = fits.ColDefs(cols)
+                                hdu = fits.BinTableHDU.from_columns(new_cols)
                                 targets_i[1] = hdu
                                 targets_i[1].header[hdrkeys['weightN']] = targets[1].header[hdrkeys['weightN']]
                                 targets_i[1].header[hdrkeys['weightSigma']] = targets[1].header[hdrkeys['weightSigma']]
@@ -195,7 +195,7 @@ def cpp_part(output_folder,**config):
 
                                 for tier in range(2,len(targets)):
                                     data = copy.copy(targets[tier].data)
-                                    hdu = pf.ImageHDU(data)
+                                    hdu = fits.ImageHDU(data)
                                     hdu.header[hdrkeys['weightN']] =   targets[0].header[hdrkeys['weightN']]
                                     hdu.header[hdrkeys['weightSigma']] = targets[0].header[hdrkeys['weightSigma']]
                                     hdu.header['TIERNAME'] = targets[tier].header['TIERNAME']
@@ -241,13 +241,13 @@ def cpp_part(output_folder,**config):
                                 cols = [] 
                                 for k in c:
                                     try:
-                                        cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][mask,:]))
+                                        cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name][mask,:]))
                                     except:
-                                        cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][mask]))
+                                        cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name][mask]))
 
 
-                                new_cols = pf.ColDefs(cols)
-                                hdu = pf.BinTableHDU.from_columns(new_cols)
+                                new_cols = fits.ColDefs(cols)
+                                hdu = fits.BinTableHDU.from_columns(new_cols)
                                 targets_i[1] = hdu
                                 targets_i[1].header[hdrkeys['weightN']] = targets[1].header[hdrkeys['weightN']]
                                 targets_i[1].header[hdrkeys['weightSigma']] = targets[1].header[hdrkeys['weightSigma']]
@@ -257,7 +257,7 @@ def cpp_part(output_folder,**config):
 
                                 for tier in range(2,len(targets)):
                                     data = copy.copy(targets[tier].data)
-                                    hdu = pf.ImageHDU(data)
+                                    hdu = fits.ImageHDU(data)
                                     hdu.header[hdrkeys['weightN']] =   targets[0].header[hdrkeys['weightN']]
                                     hdu.header[hdrkeys['weightSigma']] = targets[0].header[hdrkeys['weightSigma']]
                                     hdu.header['TIERNAME'] = targets[tier].header['TIERNAME']
@@ -311,7 +311,7 @@ def cpp_part(output_folder,**config):
                                 
                                 
                                 templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[run_count+comm.rank])
-                                templates_ = pf.open(templatesfile)
+                                templates_ = fits.open(templatesfile)
                                 templates_i = copy.copy(templates_)
                                 len_templ = len(templates_[1].data['ID'])
                                 n_batch_templates = math.ceil(len_templ/config['bacth_size_templates'])
@@ -324,13 +324,13 @@ def cpp_part(output_folder,**config):
                                         cols = [] 
                                         for k in c:
                                             try:
-                                                cols.append(pf.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][n*config['bacth_size_templates']:(n+1)*config['bacth_size_templates'],:]))
+                                                cols.append(fits.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][n*config['bacth_size_templates']:(n+1)*config['bacth_size_templates'],:]))
                                             except:
-                                                cols.append(pf.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][n*config['bacth_size_templates']:(n+1)*config['bacth_size_templates']]))
+                                                cols.append(fits.Column(name=k.name,format=k.format,array=templates_[1].data[k.name][n*config['bacth_size_templates']:(n+1)*config['bacth_size_templates']]))
 
 
-                                        new_cols = pf.ColDefs(cols)
-                                        hdu = pf.BinTableHDU.from_columns(new_cols)
+                                        new_cols = fits.ColDefs(cols)
+                                        hdu = fits.BinTableHDU.from_columns(new_cols)
 
 
 
@@ -373,13 +373,13 @@ def cpp_part(output_folder,**config):
                                         cols = [] 
                                         for k in c:
                                             try:
-                                                cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][mask,:][start:end,:]))
+                                                cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name][mask,:][start:end,:]))
                                             except:
-                                                cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][mask][start:end]))
+                                                cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name][mask][start:end]))
 
 
-                                        new_cols = pf.ColDefs(cols)
-                                        hdu = pf.BinTableHDU.from_columns(new_cols)
+                                        new_cols = fits.ColDefs(cols)
+                                        hdu = fits.BinTableHDU.from_columns(new_cols)
                                         targets_i[1] = hdu
                                         targets_i[1].header[hdrkeys['weightN']] = targets[1].header[hdrkeys['weightN']]
                                         targets_i[1].header[hdrkeys['weightSigma']] = targets[1].header[hdrkeys['weightSigma']]
@@ -389,7 +389,7 @@ def cpp_part(output_folder,**config):
 
                                         for tier in range(2,len(targets)):
                                             data = copy.copy(targets[tier].data)
-                                            hdu = pf.ImageHDU(data)
+                                            hdu = fits.ImageHDU(data)
                                             hdu.header[hdrkeys['weightN']] =   targets[0].header[hdrkeys['weightN']]
                                             hdu.header[hdrkeys['weightSigma']] = targets[0].header[hdrkeys['weightSigma']]
                                             hdu.header['TIERNAME'] = targets[tier].header['TIERNAME']
@@ -474,7 +474,7 @@ def cpp_part(output_folder,**config):
                         while run_count< len(noise_tiers):
                             if run_count<len(noise_tiers):
                                 templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[run_count])
-                                templates_ = pf.open(templatesfile)
+                                templates_ = fits.open(templatesfile)
                                 len_templ = len(templates_[1].data['ID'])
                                 n_batch_templates = math.ceil(len_templ/config['bacth_size_templates'])
                                 del templates_
@@ -494,7 +494,7 @@ def cpp_part(output_folder,**config):
                                         targetfile = output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt)
 
                                         # try to see if it has been run already ----
-                                        m_ = pf.open(targetfile)
+                                        m_ = fits.open(targetfile)
                                         #try:
                                         #    m_[1].data['NUNIQUE']
                                         #except:
@@ -515,7 +515,7 @@ def cpp_part(output_folder,**config):
                                
                                 targetfile = output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[xx],n,tt)
                                  # try to see if it has been run already ----
-                                m_ = pf.open(targetfile)
+                                m_ = fits.open(targetfile)
                                 #try:
                                 #    m_[1].data['NUNIQUE']
                                 #except:
@@ -542,7 +542,7 @@ def cpp_part(output_folder,**config):
                     if comm.rank==0:
                         
                             target = path_templates+'/{0}targets_sample_g.fits'.format(add)
-                            targets = pf.open(target)
+                            targets = fits.open(target)
                             len_targets = len(targets[1].data['ID'])
                             pqr = np.zeros((len_targets,6))
                             NUNIQUE = np.zeros(len_targets)
@@ -563,7 +563,7 @@ def cpp_part(output_folder,**config):
                                     end = min([len_targets,(run_count+1)*chunk_size])
 
 
-                                    targets_i = pf.open(path_templates+'/{0}targets_sample_g_{1}.fits'.format(add,run_count))           
+                                    targets_i = fits.open(path_templates+'/{0}targets_sample_g_{1}.fits'.format(add,run_count))           
                                     NUNIQUE[start:end] = targets_i[1].data['NUNIQUE']
                                     #AREA[start:end] = targets_i[1].data['AREA']
                                     pqr[start:end] = targets_i[1].data['PQR']
@@ -574,7 +574,7 @@ def cpp_part(output_folder,**config):
                                 chunks = len(noise_tiers)
                                 for run_count in range(chunks):
                                     mask_targets = targets[1].data['NOISETIER']  == noise_tiers[run_count]
-                                    targets_i = pf.open(path_templates+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count]))           
+                                    targets_i = fits.open(path_templates+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count]))           
                                     NUNIQUE[mask_targets] = targets_i[1].data['NUNIQUE']
                                     pqr[mask_targets] = targets_i[1].data['PQR']
                                     
@@ -587,7 +587,7 @@ def cpp_part(output_folder,**config):
 
 
                                     templatesfile = path_templates+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[run_count])
-                                    templates_ = pf.open(templatesfile)
+                                    templates_ = fits.open(templatesfile)
                                     len_templ = len(templates_[1].data['ID'])
                                     n_batch_templates = math.ceil(len_templ/config['bacth_size_templates'])
                                     del templates_
@@ -606,7 +606,7 @@ def cpp_part(output_folder,**config):
                                             end = min([len(mask[mask]),(tt+1)*config['bacth_size_targets']])
 
                                             try:
-                                                targets_i = pf.open(path_templates+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt))  
+                                                targets_i = fits.open(path_templates+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt))  
                                                 ma = np.in1d(np.arange(len(mask_targets)),np.arange(len(mask_targets))[mask_targets][start:end][targets_i[1].data['SELECT']])
                                                 NUNIQUE[ma] += targets_i[1].data['NUNIQUE'][targets_i[1].data['SELECT']]
                                                 pqr[ma] += targets_i[1].data['PQR'][targets_i[1].data['SELECT']]
@@ -633,29 +633,29 @@ def cpp_part(output_folder,**config):
                             #    pass
                             for k in c:
                                 if k.name == 'PQR':
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=pqr))
+                                    cols.append(fits.Column(name=k.name,format=k.format,array=pqr))
                                 elif k.name == 'NUNIQUE':
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=NUNIQUE))
+                                    cols.append(fits.Column(name=k.name,format=k.format,array=NUNIQUE))
                                 else:
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name]))
+                                    cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name]))
 
                             if sum([cc.name=='PQR' for cc in cols]) ==0:
-                                cols.append(pf.Column(name='PQR',format='6E',array=pqr))
+                                cols.append(fits.Column(name='PQR',format='6E',array=pqr))
 
                             if sum([cc.name=='NUNIQUE' for cc in cols]) ==0:
-                                cols.append(pf.Column(name='NUNIQUE',format='1J',array=NUNIQUE))
+                                cols.append(fits.Column(name='NUNIQUE',format='1J',array=NUNIQUE))
 
 
 
-                            new_cols = pf.ColDefs(cols)
-                            hdu = pf.BinTableHDU.from_columns(new_cols)
+                            new_cols = fits.ColDefs(cols)
+                            hdu = fits.BinTableHDU.from_columns(new_cols)
                             targets_i[1] = hdu
                             targets_i[1].header[hdrkeys['weightN']] = targets[1].header[hdrkeys['weightN']]
                             targets_i[1].header[hdrkeys['weightSigma']] = targets[1].header[hdrkeys['weightSigma']]
 
                             for tier in range(2,len(targets)):
                                 data = copy.copy(targets[tier].data)
-                                hdu = pf.ImageHDU(data)
+                                hdu = fits.ImageHDU(data)
                                 
                                 
                                 hdu.header[hdrkeys['weightN']] =   targets[0].header[hdrkeys['weightN']]

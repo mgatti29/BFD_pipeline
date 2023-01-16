@@ -4,7 +4,7 @@
 
 import sys
 import numpy as np
-import astropy.io.fits as pf
+import astropy.io.fits as fits
 import bfd
 import argparse
 from bfd.keywords import *
@@ -43,7 +43,7 @@ def createTiers(targetFile=None,
     wtSigma = None
     for f in targetFile:
         print('# Acquiring target covariances from',f)
-        hdu = pf.open(f)[1]
+        hdu = fits.open(f)[1]
         if wtN is None:
             hdrkeys['weightSigma']
             wtN = hdu.header[hdrkeys['weightN']]
@@ -90,6 +90,8 @@ if __name__=='__main__':
     parser.add_argument('--fluxMax', help='Maximum target flux to use', type=float)
     parser.add_argument('--minTargets', help='Minimum targets to retain a tier', type=int, default=10)
     args = parser.parse_args()
+    
+    
 
     tc = createTiers(**vars(args))
     tc.save(args.output)

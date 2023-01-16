@@ -11,7 +11,7 @@ from astropy.coordinates import SkyCoord
 import glob
 import numpy as np
 import pandas as pd
-import pyfits as pf
+import astropy.io.fits as fits
 from matplotlib import pyplot as plt
 import ngmix.gmix as gmix
 import ngmix            
@@ -390,7 +390,7 @@ def measure_moments_templates(output_folder,**config):
     '''
     
 
-    deep_fields_catalog_u = pf.open(config['deep_fields_catalog'])
+    deep_fields_catalog_u = fits.open(config['deep_fields_catalog'])
     deep_fields_catalog = pd.DataFrame.from_dict({'ra':np.array(deep_fields_catalog_u[1].data['RA']).byteswap().newbyteorder(),
                                                   'dec':np.array(deep_fields_catalog_u[1].data['DEC']).byteswap().newbyteorder(),
                                                   'TILENAME':np.array(deep_fields_catalog_u[1].data['TILENAME']).byteswap().newbyteorder(),

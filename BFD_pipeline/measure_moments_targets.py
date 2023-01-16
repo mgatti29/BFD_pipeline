@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import pyfits as pf  
+import astropy.io.fits as fits
 import meds
 import psfex
 import bfd
