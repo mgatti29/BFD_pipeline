@@ -189,11 +189,6 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
                             xy_max = config['xy_max'])
 
 
-            limits = {'SN_Mf_min': config['sn_min'],
-                      'SN_Mf_max': config['sn_max'],
-                      'Mf_max': config['Mf_max'],
-                      'Mf_min': config['Mf_min']}#targets_properties[t_index]['Mf_min']}
-
 
             print ('sigma_flux: ', config['sigma_flux'])
             print ('sigma_XY: ', config['sigma_xy'])
@@ -275,18 +270,6 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
                     mask_bool = True
 
 
-                    if limits['SN_Mf_min'] > SN_mute: 
-                        #print ('not passing SN min')
-                        mask_bool = False
-                    if limits['SN_Mf_max'] < SN_mute: 
-                        #print ('not passing SN maxx')
-                        mask_bool = False
-                    if limits['Mf_min'] > Mf: 
-                        #print ('not passing Mf_min')
-                        mask_bool = False
-                    if limits['Mf_max'] < Mf: 
-                        #print ('not passing Mf_max')
-                        mask_bool = False
                     if mask_bool:
                             cumulative_weight1 += w_ 
                             #print (i)
@@ -347,6 +330,15 @@ def make_templates(output_folder,**config):
         config['reduce_input_files']
     except:
         config['reduce_input_files'] = False
+    try:
+        config['min_sn_regrouping']
+    except:
+        config['min_sn_regrouping'] = 17
+    try:
+        config['resume_templates_full']
+    except:
+        config['resume_templates_full'] = False
+        
     if ('compute' in config['stage']) or ('assembly' in config['stage']):
         
         # read list of targets :
@@ -442,7 +434,10 @@ def make_templates(output_folder,**config):
         #error_odd = []
         indexu = []
         indexu_gal = []
-        mof_index = []
+        
+        mf_per_band = []
+        
+            
         ra = []
         dec = []
         ra_DF = []
@@ -466,7 +461,10 @@ def make_templates(output_folder,**config):
                     #error_odd.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
                     indexu.append(save_[index]['index'] )
                     indexu_gal.append(save_[index]['index_gal'] )
-
+                    try:
+                        mf_per_band.append(save_[index]['mf_per_band'] )
+                    except:
+                        pass
                     try:
                         mof_index.append(save_[index]['MOF_index'] )
                         ra.append(save_[index]['ra'])
@@ -487,6 +485,7 @@ def make_templates(output_folder,**config):
                 
                 
         # match with des y3 catalog ----
+        print ('des_y3_match ', config['des_y3_match'])
         if config['des_y3_match']:
             dd = h5.File(config['des_y3_match'])
             dd = np.array(dd['data']['table'])
@@ -497,8 +496,12 @@ def make_templates(output_folder,**config):
             moments = np.array(moments)[id_mask,:]
             moments_odd = np.array(moments_odd)[id_mask,:]
             error = np.array(error)[id_mask,:]
+            try:
+                mf_per_band = np.array(mf_per_band)[id_mask,:]
+            except:
+                pass
             indexu = np.array(indexu)[id_mask]
-            indexu_gal = np.array(indexu)
+            indexu_gal = np.array(indexu_gal)[id_mask]
             
             try:
                 mof_index = mof_index[id_mask]
@@ -516,6 +519,51 @@ def make_templates(output_folder,**config):
             except:
                 pass
         
+        if config['resume_templates_full']:
+            col=[]
+
+            col.append(fits.Column(name="index",format="K",array=np.array(indexu)))
+            col.append(fits.Column(name="index_gal",format="K",array=np.array(indexu_gal)))
+
+            try:
+                col.append(fits.Column(name="mf_per_band",format="{0}E".format(mf_per_band.shape[0]),array=np.array(mf_per_band)))
+            except:
+                pass
+            col.append(fits.Column(name="moments",format="5E",array=np.array(moments)))
+            col.append(fits.Column(name="moments_odd",format="5E",array=np.array(moments_odd)))
+
+
+            col.append(fits.Column(name="error_moments",format="5E",array=np.array(error)))
+
+            try:
+                col.append(fits.Column(name="mof_index",format="K",array=np.array(mof_index)))
+                col.append(fits.Column(name="ra",format="E",array=np.array(ra)))
+                col.append(fits.Column(name="dec",format="E",array=np.array(dec)))
+                col.append(fits.Column(name="ra_DF",format="E",array=np.array(ra_DF)))
+                col.append(fits.Column(name="dec_DF",format="E",array=np.array(dec_DF)))
+                col.append(fits.Column(name="MAG_I",format="E",array=np.array(MAG_I)))
+                col.append(fits.Column(name="tilename",format="128A",array=np.array(tilename)))
+            except:
+                pass
+
+            try:
+                col.append(fits.Column(name="p0",format="E",array=np.array(p0_)))
+                col.append(fits.Column(name="p0_PSF",format="E",array=np.array(p0_PSF_)))
+            except:
+                pass
+
+      
+            tbhdu = fits.BinTableHDU.from_columns(col)
+            prihdu = fits.PrimaryHDU()
+            thdulist = fits.HDUList([prihdu,tbhdu])
+            try:
+                thdulist.writeto(output_folder+'/templates_overview_full.fits',overwrite=True)
+            except:
+                pass    
+
+            
+
+            
         
         moments = np.array(moments)
 
@@ -542,17 +590,25 @@ def make_templates(output_folder,**config):
         new_DV_ = new_DV_[:,mask]
 
 
-        # let's define a region of SN < 100.
-        mask = new_DV[:,0]/np.sqrt(u[1][0,0])< 100.
-        mask = (new_DV[:,0]/np.sqrt(u[-1][0,0])< 10000000.)
-
-
-
+        
+        
+        
+        # let us apply this only to objects with low SN
+        mask = new_DV[:,0]/np.sqrt(u[1][0,0])< config['min_sn_regrouping']
+        
+        
+        #mask = (new_DV[:,0]/np.sqrt(u[-1][0,0])< 10000000.)
+        print ('')
+        print ('re-grouping {0} / {1}'.format(len(mask[mask]),len(mask)))
+        print ('')
+        
         mask_w,w,even_new,odd_new = select_obj_w(new_DV_[mask,:],np.array(moments)[mask,:],np.array(moments_odd)[mask,:],config['sigma_group_templates'])  
         
         
-        newweigths = np.zeros(len(mask))
-        newweigths = w
+        newweigths = np.ones(len(mask))
+        newweigths[mask] = w
+        
+        mask = (new_DV[:,0]/np.sqrt(u[-1][0,0])< 10000000.)
         
    
 
@@ -595,13 +651,13 @@ def make_templates(output_folder,**config):
 
         # lower cut **
         u,o = bulkUnpack(nt[1].data['COVARIANCE'][:,:])
-        mask_l = moments[:,0]/np.sqrt(u[1,0,0]) > 2 
+        mask_l = moments[:,0]/np.sqrt(u[1,0,0]) > config['sn_min'] 
 
         # upper cut **
         u,o = bulkUnpack(nt[-1].data['COVARIANCE'][:,:])
-        mask_u = moments[:,0]/np.sqrt(u[1,0,0]) < 80
+        mask_u = moments[:,0]/np.sqrt(u[1,0,0]) < config['sn_max']
 
-        mask_total = mask_u & mask_l & (w>0)
+        mask_total = mask_u & mask_l & (newweigths>0)
         class_[~mask_total] = '-100_-100_-100'
 
                     
@@ -611,8 +667,13 @@ def make_templates(output_folder,**config):
         moments_odd = np.array(moments_odd)[mask_total,:]
         error = np.array(error)[mask_total,:]
         indexu = np.array(indexu)[mask_total]
-        indexu_gal = np.array(indexu)
+        newweigths = np.array(newweigths)[mask_total]
+        indexu_gal = np.array(indexu_gal)[mask_total]
 
+        try:
+            mf_per_band  = np.array(error)[mf_per_band,:]
+        except:
+            pass
         try:
             mof_index = mof_index[mask_total]
             ra = ra[mask_total]
@@ -624,8 +685,8 @@ def make_templates(output_folder,**config):
         except:
             pass
         try:
-            p0_ = p0_[mask_total]
-            p0_PSF_ = p0_PSF_[mask_total]
+            p0_ = np.array(p0_)[mask_total]
+            p0_PSF_ = np.array(p0_PSF_)[mask_total]
         except:
             pass
         class_ = class_[mask_total] 
@@ -640,18 +701,21 @@ def make_templates(output_folder,**config):
         col.append(fits.Column(name="index_gal",format="K",array=np.array(indexu_gal)))
         
         
+        try:
+            
+            col.append(fits.Column(name="mf_per_band",format="{0}E".format(mf_per_band.shape[0]),array=np.array(mf_per_band)))
+        
+        except:
+            pass
         col.append(fits.Column(name="moments",format="5E",array=np.array(moments)))
         col.append(fits.Column(name="moments_odd",format="5E",array=np.array(moments_odd)))
         
-        col.append(fits.Column(name="average_moments",format="5E",array=np.array(even_new)))
-        col.append(fits.Column(name="average_moments_odd",format="5E",array=np.array(odd_new)))
+        #col.append(fits.Column(name="average_moments",format="5E",array=np.array(even_new)))
+        #col.append(fits.Column(name="average_moments_odd",format="5E",array=np.array(odd_new)))
           
         
         col.append(fits.Column(name="error_moments",format="5E",array=np.array(error)))
         col.append(fits.Column(name="w",format="E",array=np.array(newweigths)))
-        
-        
-        
         
         
         try:
@@ -700,9 +764,12 @@ def make_templates(output_folder,**config):
                     try:
                         if os.path.exists(path+'old_'+name+'.pkl'):
                             m = load_obj(path+'old_'+name)
+                            old_exists = True
                         else:
+                            old_exists = False
                             m = load_obj(path+name)
-                        os.system('mv {0} {1}'.format(path+name+'.pkl',path+'old_'+name+'.pkl'))
+                        if old_exists:
+                            os.system('mv {0} {1}'.format(path+name+'.pkl',path+'old_'+name+'.pkl'))
                         index_gal = []
                         for ii in ((m.keys())):
                             index_gal.append(m[ii]['index_gal'])

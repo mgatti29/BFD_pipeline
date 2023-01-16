@@ -2,11 +2,11 @@ from bfd import momentcalc as mc
 from bfd.momenttable import TemplateTable, TargetTable
 from ngmix.jacobian import Jacobian
 import os, sys
-from .read_meds_utils import Image, MOF_table, DetectionsTable,render_gal,_add_T_and_scale,save_,get_box_sizes,get_sigma_size,_make_image,initialise_entries,set_noise,setup_templates_table,select_obj
+from .read_meds_utils import Image, MOF_table, DetectionsTable,render_gal,_add_T_and_scale,save_,get_box_sizes,get_sigma_size,_make_image,initialise_entries,set_noise,setup_templates_table,select_obj,subtract_background_,check_mask_and_interpolate,mfrac_
 import copy
 from astropy import units as uu
 from astropy.coordinates import SkyCoord
-
+import h5py as h5
 import bfd
 import sxdes
 import numpy as np
@@ -36,11 +36,10 @@ Targets and templates can be located at random or over a grid. A detection step 
 In short : 
 targets/templates over a grid, no detection step -> 'stamp' simulations (in the sense it has no blending and detection effects)
 targets/templates at random, with detection step -> true 'tile' simulations.(it has blending and detection effects)
-
-
-
 '''
 
+
+                    
 verbose = False
 def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
     
@@ -66,13 +65,35 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             debug_images['wcs_coordinates'] =[]
             debug_images['images_preshredding']= []
             debug_images['images']= []
+            debug_images['mask'] = []
+            debug_images['seg']= []
+        
         
         try:
+            
             config['perfect_deblender']
         except:
             config['perfect_deblender'] = False
             
-                                            
+        try:
+            config['background'] 
+        except:
+            config['background'] = 0.
+            
+        try:
+            config['mfrac']
+        except:
+            config['mfrac'] = 1.
+        try:
+            config['mask_data']
+            
+            if config['mask_data']:
+                mask_data = np.load(config['mask_data'],allow_pickle=True)
+                                
+        except:
+            config['mask_data'] = False
+
+        
         # create 2 target tables to store coordinates/moments etc. 
         # we create 2(tab_targets & tab_targets_m) because we need a table for each of the positively/negatively sheared version of the simulated tiles.
   
@@ -266,7 +287,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
     
             
             
-            AREA =  (config['size_tile']-120)**2
+            AREA =  (config['size_tile']-80)**2
             
             if verbose:
                 print ('')    
@@ -516,23 +537,12 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         tile[b]['image_m_noisefree'] = copy.deepcopy(tile[b]['image_m'])
                         tile[b]['image_p']+=tile[b]['noise']
                         tile[b]['image_m']+=tile[b]['noise']
-
+                      
 
                             # apply mask
-                if not config['maskless']:
-                    mask = ( tile[band]['weight']==0. )| (tile[band]['mask']!=0.) 
-                    if do_templates:
-                        tile[b]['image_n'][mask] = 0. 
-
-                        tile[b]['image_n_noisefree'][mask] = 0.     
-                    else:
-                        tile[b]['image_p'][mask] = 0. 
-                        tile[b]['image_m'][mask] = 0. 
-
-                        tile[b]['image_p_noisefree'][mask] = 0. 
-                        tile[b]['image_m_noisefree'][mask] = 0. 
-
-                        
+                tile[band]['mask'] = np.zeros_like(noise).astype(np.int)
+  
+                          
                         
             #********************************************************
             #               sEXTRACTOR DETECTION                    #
@@ -540,15 +550,15 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             
             if config['mode_detection'] == 'detection':
                 detection_cat = dict()
-
+                seg_map = dict()
                 for b in config['bands']:
                     detection_cat[b] = dict()
+                    seg_map[b] = dict()
                     if do_templates:
-                        detection_cat[b]['image_n'], seg_p = sxdes.run_sep(tile[band]['image_n'], noise_ext)
-
+                        detection_cat[b]['image_n'], seg_map[b]['image_n'] = sxdes.run_sep(tile[band]['image_n'], noise_ext)
                     else:
-                        detection_cat[b]['image_p'], seg_p = sxdes.run_sep(tile[band]['image_p'], noise_ext)
-                        detection_cat[b]['image_m'], seg_m = sxdes.run_sep(tile[band]['image_m'], noise_ext)
+                        detection_cat[b]['image_p'], seg_map[b]['image_p'] = sxdes.run_sep(tile[band]['image_p'], noise_ext)
+                        detection_cat[b]['image_m'], seg_map[b]['image_m'] = sxdes.run_sep(tile[band]['image_m'], noise_ext)
 
         
         
@@ -771,7 +781,10 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
                     '''
                 #print ('final coordinates: ',len(np.arange(len_loop)[indexes_final]))
-                # measurement loop ******************************************************************************
+                #**************************************
+                #           MEASUREMENT LOOP          #
+                #**************************************
+                
                 templates_id = []
              
                 ix_ =0
@@ -780,7 +793,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         
                         # the outer 40 pixels are never used to inject galaxies, so if there's a detection there it shoud be dropped. 
                         if config['mode_detection'] == 'detection':
-                            obj_within_good_area = (detection_cat[config['bands'][0]][im_type]['x'][ix]>=60) & (detection_cat[config['bands'][0]][im_type]['x'][ix]<= (config['size_tile']-60)) &  (detection_cat[config['bands'][0]][im_type]['y'][ix]>=60) & (detection_cat[config['bands'][0]][im_type]['y'][ix]<= (config['size_tile']-60))
+                            obj_within_good_area = (detection_cat[config['bands'][0]][im_type]['x'][ix]>=35) & (detection_cat[config['bands'][0]][im_type]['x'][ix]<= (config['size_tile']-35)) &  (detection_cat[config['bands'][0]][im_type]['y'][ix]>=35) & (detection_cat[config['bands'][0]][im_type]['y'][ix]<= (config['size_tile']-35))
                         else:
                             obj_within_good_area = True
                             
@@ -806,12 +819,12 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
 
                                     #match to input catalog to find PSF & noise model for the stamp *******
-
-
                                     goldcat = SkyCoord(ra=[detection_cat[config['bands'][0]][im_type]['x'][ix]*uu.degree*0.263/60.], dec=[detection_cat[config['bands'][0]][im_type]['y'][ix]*uu.degree*0.263/60.])  
                                     catalog = SkyCoord(ra=ll[:,0]*uu.degree*0.263/60., dec=ll[:,1]*uu.degree*0.263/60.)  
                                     idx, d2d, d3d = goldcat.match_to_catalog_sky(catalog, nthneighbor=1) 
                                     dist_pix = np.sqrt((detection_cat[config['bands'][0]][im_type]['x'][ix]-ll[idx][0][0])**2+(detection_cat[config['bands'][0]][im_type]['y'][ix]-ll[idx][0][1])**2)
+                                    
+                                    
                                     
 
                                     #print ('distance detection from nearest input ',dist_pix)
@@ -856,11 +869,53 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     p0 = Input_catalog[imc_keys[np.int(ix)]][band]['p0']
 
 
-                                image_stamp = tile[band][im_type][masky,:][:,maskx]
+                                seg_ = seg_map[b][im_type][masky,:][:,maskx]
+                                
+                                if not do_templates:
+                                    image_stamp = tile[band][im_type][masky,:][:,maskx]+config['background']
+                                else:
+                                    image_stamp = tile[band][im_type][masky,:][:,maskx]
+                                    
+                                
+                                
+                                if config['mask_data']:
+                                    print ('DOING MASKING STUFF')
+                                    mute =  mask_data[np.random.randint(0,len(mask_data),1)[0]]
+                                    mask_ =(np.zeros_like(image_stamp)).astype(np.int)
+                                    mask_[:mute.shape[0],:mute.shape[1]] = mute[:mask_.shape[0],:mask_.shape[1]] 
+                                    image_stamp[mask_ != 0 ] = 0
+                                else:
+                                    mask_ = (np.zeros_like(image_stamp)).astype(np.int)
+                                    
+                                
                                 wt_stamp = tile[band][im_type][masky,:][:,maskx]
-
                                 
+                              
+                                if config['debug']:
+                                    debug_images['images_preshredding'].append(copy.deepcopy(image_stamp)) 
+                                    debug_images['seg'].append(copy.deepcopy(seg_)) 
+                                    
+                                    
+                                    
+                                    
+                                if config['background_subtraction'] == True:
+                                    bkg,len_v = subtract_background_(copy.deepcopy(image_stamp), seg_, mask_)
+                                    #print (subtract_background_(image_stamp, seg_, mask_),subtract_background_(tile[band][im_type][masky,:][:,maskx], seg_, mask_))
+                                else:
+                                    bkg = 0.  
+                                    len_v = 1000000000.
                                 
+                         
+                                if not do_templates:
+                                    #bkg = config['background']
+                                    #len_v = 1000000000.
+                                    image_stamp -=bkg
+                                    
+                                    
+                                    #bkg = subtract_background_(image_stamp, seg_, mask_)
+                                   # print (bkg)
+                                    
+                                    
                                 # SHREDDER SUBTRACTION *********
                                 if (config['mode_detection'] == 'detection') and (config['shredder']):
                                     st = timeit.default_timer()
@@ -884,8 +939,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     gm = ngmix.GMix(pars=pars)
                                     im0 = gm.make_image((config['size_tile'],config['size_tile']), jacobian=jac_shredder)
                             
-                                    if config['debug']:
-                                        debug_images['images_preshredding'].append(image_stamp)
+         
                                     image_stamp = image_stamp-(shredder_cat[im_type]['models'][0]-im0)[masky,:][:,maskx]
                                     
                                 if (config['mode_detection'] == 'detection') and (config['perfect_deblender']):
@@ -939,18 +993,14 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                             
                                             models_ -= model_
                                             count_blends +=1
-                                        #else:
-                                            
-                                            
-                             
-                                            
-                                    if config['debug']:
-                                        debug_images['images_preshredding'].append(image_stamp)
+
                                     image_stamp = image_stamp-models_
                                                                                
                                     
                                     end = timeit.default_timer()
                              
+                            
+           
 
                                 # render galaxy and psf model *****
                                 cent=(image_stamp.shape[0]/2.,image_stamp.shape[0]/2.)
@@ -965,9 +1015,29 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                 else:
                                     _,  psf_image,jac = render_gal(gal_p,psf_p,wcs__,image_stamp.shape[0], g1 = config['g1'][0], g2 = config['g2'][0],return_PSF=True)
 
+                            
+                            
+
+                                mask_frac =0.
+                                if config['interpolate_mask']:
+                                    if np.sum(mask_.flatten())>0:
+                                        # compute mask frac ----
+                                        mask_frac = mfrac_(mask_,image_stamp.shape[0],wcs__)
+                                        if mask_frac<config['mfrac']/2.:
+                                            image_stamp = quick_mask_interp(copy.deepcopy(image_stamp),copy.deepcopy(mask_),noise_ext)
+                                        
+                                           # image_stamp, nbad = check_mask_and_interpolate(copy.deepcopy(image_stamp),copy.deepcopy(mask_))
+                                
+                                
+                                     
+                                                       
+                                    
+                                    
                                 #print (image_stamp.shape,psf_image.shape)
                                 if config['debug']:
-                                    debug_images['images_aftershredding'].append(image_stamp)
+                                    debug_images['images_aftershredding'].append([image_stamp])
+                                    debug_images['mask'].append([copy.deepcopy(mask_)])
+                                   # debug['bkg'] = [bkg]
                                     #debug_images['images_aftershredding'].append(psf_image)
                                     debug_images['wcs_coordinates'].append(wcs_.xy0)
                                 
@@ -1021,11 +1091,17 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
                             if do_templates:
                                 if config['mode_detection'] == 'detection':
-                                    Wide_g = Image(Input_catalog[imc_keys[np.int(ix)]][band]['p0'], meds = [], bands = config['bands'])
+                                    goldcat = SkyCoord(ra=[detection_cat[config['bands'][0]][im_type]['x'][ix]*uu.degree*0.263/60.], dec=[detection_cat[config['bands'][0]][im_type]['y'][ix]*uu.degree*0.263/60.])  
+                                    catalog = SkyCoord(ra=ll[:,0]*uu.degree*0.263/60., dec=ll[:,1]*uu.degree*0.263/60.)  
+                                    idx, d2d, d3d = goldcat.match_to_catalog_sky(catalog, nthneighbor=1) 
+                                    
+                                    Wide_g = Image(Input_catalog[imc_keys[np.int(idx)]][band]['p0'], meds = [], bands = config['bands'])
                                 else:
                                     Wide_g = Image(Input_catalog[imc_keys[np.int(ix)]][band]['p0'], meds = [], bands = config['bands'])
 
 
+                                    
+                                
                                 tab_detections.add_image(Wide_g)
                                
                                 tab_detections.images[ix_].moments = mul
@@ -1038,104 +1114,111 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     if dist_pix >3:
                                         tab_detections.images[ix_].p0 = -1.
                                     else:
-                                        tab_detections.images[ix_].p0 = Input_catalog[imc_keys[np.int(ix)]][band]['p0']
-                                    tab_detections.images[ix_].p0_PSF = Input_catalog[imc_keys[np.int(ix)]][band]['p0_PSF']
-                                    templates_id.append(Input_catalog[imc_keys[np.int(ix)]][band]['p0'])
+                                        tab_detections.images[ix_].p0 = Input_catalog[imc_keys[np.int(idx)]][band]['p0']
+                                    tab_detections.images[ix_].p0_PSF = Input_catalog[imc_keys[np.int(idx)]][band]['p0_PSF']
+                                    templates_id.append(Input_catalog[imc_keys[np.int(idx)]][band]['p0'])
                                 if config['mode_detection'] == 'input':
                                     tab_detections.images[ix_].p0 = Input_catalog[imc_keys[np.int(ix)]][band]['p0']
                                     tab_detections.images[ix_].p0_PSF = Input_catalog[imc_keys[np.int(ix)]][band]['p0_PSF']
                                     templates_id.append(Input_catalog[imc_keys[np.int(ix)]][band]['p0'])
                                 ix_ += 1
 
+                            if mask_frac<config['mfrac']/2.:
+                                if not do_templates:
+                                    if meb[0,0] != meb[0,0]:
+                                        pass
+                                        #print ('NAN ',im_type,dist_pix,newcent,wcs_.xy0 )
 
-                            if not do_templates:
-                                if meb[0,0] != meb[0,0]:
-                                    pass
-                                    #print ('NAN ',im_type,dist_pix,newcent,wcs_.xy0 )
-                
-                                if im_type == 'image_p':
-                                    if (mom.even ==  mom.even)[0]:
-                                        tab_targets.add(mom, xy=newcent,id=ix,covgal=MomentCovariance(covgal[0],covgal[1]))
-                                        tab_targets.p0.append(p0)
-                                        tab_targets.p0_PSF.append(p0_PSF)
-                                        tab_targets.ra.append(newcent[0])
-                                        tab_targets.dec.append(newcent[1])
-                                        tab_targets.ra_shift.append(newcent_shift[0])
-                                        tab_targets.dec_shift.append(newcent_shift[1])
-                                        tab_targets.AREA.append(0.)
-                                        
-                                        try:
-                                            tab_targets.is_it_a_blend.append(count_blends)
-                                        except:
-                                            pass
-                                        #meb_ = np.array([m_.even for m_ in meb])
-                                        tab_targets.meb.append(meb[0,:])
-                                        try:
-                                            tab_targets.true_fluxes.append(fluxes)
-                                        except:
-                                            pass
-                                        Mf,Mr,M1,M2,_ = mul_PSF.get_moment(0.,0.).even
-                                #
-                                       
-                                        tab_targets.psf_Mf.append(Mf)
-                                        tab_targets.psf_Mr.append(Mr)
-                                        tab_targets.psf_M1.append(M1)
-                                        tab_targets.psf_M2.append(M2)
+                                    if im_type == 'image_p':
+                                        if (mom.even ==  mom.even)[0]:
+                                            tab_targets.add(mom, xy=newcent,id=ix,covgal=MomentCovariance(covgal[0],covgal[1]))
+                                            tab_targets.p0.append(p0)
+                                            tab_targets.p0_PSF.append(p0_PSF)
+                                            tab_targets.ra.append(newcent[0])
+                                            tab_targets.dec.append(newcent[1])
+                                            tab_targets.ra_shift.append(newcent_shift[0])
+                                            tab_targets.dec_shift.append(newcent_shift[1])
+                                            tab_targets.AREA.append(0.)
+                                            tab_targets.bkg.append(bkg)
+                                            tab_targets.len_v.append(len_v)
+                                            
+                                            
 
-                                        tab_targets.cov_odd_per_band.append(cov_odd_save_per_band)
-                                        tab_targets.cov_even_per_band.append(cov_even_save_per_band)
+                                            try:
+                                                tab_targets.is_it_a_blend.append(count_blends)
+                                            except:
+                                                pass
+                                            #meb_ = np.array([m_.even for m_ in meb])
+                                            tab_targets.meb.append(meb[0,:])
+                                            try:
+                                                tab_targets.true_fluxes.append(fluxes)
+                                            except:
+                                                pass
+                                            Mf,Mr,M1,M2,_ = mul_PSF.get_moment(0.,0.).even
+                                    #
 
+                                            tab_targets.psf_Mf.append(Mf)
+                                            tab_targets.psf_Mr.append(Mr)
+                                            tab_targets.psf_M1.append(M1)
+                                            tab_targets.psf_M2.append(M2)
 
-                                            #tab_targets.band1.append(nn[0])
-                                            #tab_targets.band2.append(nn[1])
-                                            #tab_targets.band3.append(nn[2])   
-                                        try:
-                                            tab_targets.des_id.append(params_image_sims[p0]['des_id'])
-                                            tab_targets.photoz.append(params_image_sims[p0]['photoz'])
-                                        except:
-                                            pass
-
-                                elif im_type == 'image_m':
-                                    if (mom.even ==  mom.even)[0]:
-                                        tab_targets_m.add(mom, xy=newcent,id=ix,covgal=MomentCovariance(covgal[0],covgal[1]))
-
-                                        tab_targets_m.p0.append(p0)
-                                        tab_targets_m.p0_PSF.append(p0_PSF)
-                                        tab_targets_m.ra.append(newcent[0])
-                                        tab_targets_m.dec.append(newcent[1])
-                                        tab_targets_m.ra_shift.append(newcent_shift[0])
-                                        tab_targets_m.dec_shift.append(newcent_shift[1])
-
-                                        #meb_ = np.array([m_.even for m_ in meb])
-                                        tab_targets_m.meb.append(meb[0,:])
-                                        tab_targets_m.AREA.append(0.)
-                                        try:
-                                            tab_targets_m.true_fluxes.append(fluxes)
-                                        except:
-                                            pass
-                                        try:
-                                            tab_targets_m.is_it_a_blend.append(count_blends)
-                                        except:
-                                            pass
-                                        Mf,Mr,M1,M2,_ = mul_PSF.get_moment(0.,0.).even
-                                #
-                                        tab_targets_m.psf_Mf.append(Mf)
-                                        tab_targets_m.psf_Mr.append(Mr)
-                                        tab_targets_m.psf_M1.append(M1)
-                                        tab_targets_m.psf_M2.append(M2)
-
-                                        tab_targets_m.cov_odd_per_band.append(cov_odd_save_per_band)
-                                        tab_targets_m.cov_even_per_band.append(cov_even_save_per_band)
+                                            tab_targets.cov_odd_per_band.append(cov_odd_save_per_band)
+                                            tab_targets.cov_even_per_band.append(cov_even_save_per_band)
 
 
-                                            #tab_targets.band1.append(nn[0])
-                                            #tab_targets.band2.append(nn[1])
-                                            #tab_targets.band3.append(nn[2])   
-                                        try:
-                                            tab_targets_m.des_id.append(params_image_sims[p0]['des_id'])
-                                            tab_targets_m.photoz.append(params_image_sims[p0]['photoz'])
-                                        except:
-                                            pass
+                                                #tab_targets.band1.append(nn[0])
+                                                #tab_targets.band2.append(nn[1])
+                                                #tab_targets.band3.append(nn[2])   
+                                            try:
+                                                tab_targets.des_id.append(params_image_sims[p0]['des_id'])
+                                                tab_targets.photoz.append(params_image_sims[p0]['photoz'])
+                                            except:
+                                                pass
+
+                                    elif im_type == 'image_m':
+                                        if (mom.even ==  mom.even)[0]:
+                                            tab_targets_m.add(mom, xy=newcent,id=ix,covgal=MomentCovariance(covgal[0],covgal[1]))
+
+                                            tab_targets_m.p0.append(p0)
+                                            tab_targets_m.p0_PSF.append(p0_PSF)
+                                            tab_targets_m.ra.append(newcent[0])
+                                            tab_targets_m.dec.append(newcent[1])
+                                            tab_targets_m.ra_shift.append(newcent_shift[0])
+                                            tab_targets_m.dec_shift.append(newcent_shift[1])
+                                            tab_targets_m.bkg.append(bkg)
+                                            
+                                            tab_targets_m.len_v.append(len_v)
+
+                                            #meb_ = np.array([m_.even for m_ in meb])
+                                            tab_targets_m.meb.append(meb[0,:])
+                                            tab_targets_m.AREA.append(0.)
+                                            try:
+                                                tab_targets_m.true_fluxes.append(fluxes)
+                                            except:
+                                                pass
+                                            try:
+                                                tab_targets_m.is_it_a_blend.append(count_blends)
+                                            except:
+                                                pass
+                                            Mf,Mr,M1,M2,_ = mul_PSF.get_moment(0.,0.).even
+                                    #
+                                            tab_targets_m.psf_Mf.append(Mf)
+                                            tab_targets_m.psf_Mr.append(Mr)
+                                            tab_targets_m.psf_M1.append(M1)
+                                            tab_targets_m.psf_M2.append(M2)
+
+                                            tab_targets_m.cov_odd_per_band.append(cov_odd_save_per_band)
+                                            tab_targets_m.cov_even_per_band.append(cov_even_save_per_band)
+
+
+                                                #tab_targets.band1.append(nn[0])
+                                                #tab_targets.band2.append(nn[1])
+                                                #tab_targets.band3.append(nn[2])   
+                                            try:
+                                                tab_targets_m.des_id.append(params_image_sims[p0]['des_id'])
+                                                tab_targets_m.photoz.append(params_image_sims[p0]['photoz'])
+                                            except:
+                                                pass
 
 
                 # measure the additional stamp for selection purposes [applies only if RANDOM + DETECTION + POISSON] **********************************
@@ -1169,7 +1252,25 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         image_stamp = tile[band][im_type][masky,:][:,maskx]
                         if config['shredder']:
                             image_stamp = image_stamp-(shredder_cat[im_type]['models'][0])[masky,:][:,maskx]
-                        #debug_images['det_stamps'].append(image_stamp)
+                        if config['perfect_deblender']:
+                            image_stamp = image_stamp-tile[b][im_type+'_noisefree'][masky,:][:,maskx]
+                            
+                        image_stamp += config['background']    
+                  
+                        if config['background_subtraction'] == True:
+                            bkg,len_v = subtract_background_(image_stamp, np.zeros_like(image_stamp), np.zeros_like(image_stamp))
+                            #print (subtract_background_(image_stamp, seg_, mask_),subtract_background_(tile[band][im_type][masky,:][:,maskx], seg_, mask_))
+                        else:
+                            bkg = 0.  
+                            len_v = 100000000000.
+                       # bkg = config['background']  
+                       # len_v = 100000000000.
+                        
+                        image_stamp -=bkg
+                                
+                                
+                                
+                                
                         wt_stamp = tile[band][im_type][masky,:][:,maskx]                       
 
 
@@ -1205,7 +1306,8 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         
                     kds_PSF = bfd.multiImage(psf_a, (0,0), [psfn_]*len(psf_a), wcs_a, pixel_noiselist = noise_a, bandlist = bands_a,pad_factor=config['pad_factor'])
                     mul_PSF = bfd.MultiMomentCalculator(kds_PSF, wt, bandinfo = config['band_dict_code'])
-
+                    xyshift, error,msg = mul_PSF.recenter()
+                    
                     newcent = [x_a_poisson_selection,y_a_poisson_selection]
                     newcent_shift = xyshift/0.263
 
@@ -1235,6 +1337,10 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
 
 
                         tab_targets.AREA.append(AREA)
+                        tab_targets.bkg.append(bkg)
+                        tab_targets.len_v.append(len_v)
+                        
+                        
                         #print ('ip, ' , AREA)
 
                         tab_targets.meb.append(meb[0,:]*0.)
@@ -1273,6 +1379,10 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         tab_targets_m.ra_shift.append(newcent_shift[0])
                         tab_targets_m.dec_shift.append(newcent_shift[1])
                         tab_targets_m.AREA.append(AREA)
+                        tab_targets_m.bkg.append(bkg)
+                        tab_targets_m.len_v.append(len_v)
+                        
+                        
                        # print ('im, ' , AREA)
 
                         tab_targets_m.meb.append(meb[0,:]*0.)
@@ -1331,6 +1441,9 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                 
                 extra_info['noiseless tile'] = [tile[b]['image_p']-tile[b]['noise']]
                 extra_info['tile'] = [tile[b]['image_p']]
+                extra_info['seg_map'] = [seg_map[b]['image_p']]
+                
+                
                 np.save(config['output_folder']+'/targets/debug_images{0}'.format(ii_chunk),[debug_images,extra_info])
             
             
@@ -1403,7 +1516,12 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         pass
                     save__[index]['p0']= tab_detections.images[index].p0
                     save__[index]['p0_PSF']= tab_detections.images[index].p0_PSF
-                    
+                    try:
+                        save__[index]['bkg'] = tab_detections.images[index].bkg
+                        save__[index]['len_v'] = tab_detections.images[index].len_v
+                        
+                    except:
+                        pass
 
             save_obj(path,save__)
             print ('done')

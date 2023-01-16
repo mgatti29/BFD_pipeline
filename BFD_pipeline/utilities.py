@@ -60,7 +60,7 @@ def save_moments_targets(self,fitsname,config):
             pass
         try:
             l = np.array(self.meb).shape[1]
-            col.append(fits.Column(name="cov_Mf_per_band",format="{0}E".format(l),array=np.array(self.cov_even_per_band)[:,0,:]))
+            col.append(fits.Column(name="cov_Mf_per_band",format="{0}E".format(l),array=np.array(self.cov_even_per_band)))
         except:
             pass
         
@@ -71,6 +71,10 @@ def save_moments_targets(self,fitsname,config):
         except:
             pass
 
+        try:
+            col.append(fits.Column(name="bckg_flag",format="D",array=self.bckg_flag))
+        except:
+            pass
         if len(self.num_exp) == len(self.id):
             col.append(fits.Column(name="num_exp",format="K",array=self.num_exp))
         col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))

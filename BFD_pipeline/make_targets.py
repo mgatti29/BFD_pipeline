@@ -179,8 +179,12 @@ def make_targets(output_folder,**config):
                                     results_[cname] = mute[1].data[cname]
                                 else:
                                     try:
-                                        results_[cname] = np.vstack([results_[cname],mute[1].data[cname]])
+                                        if mute[1].data[cname].shape[1]>1:
+                                            results_[cname] = np.vstack([results_[cname],mute[1].data[cname]])
+                                        else:
+                                            results_[cname] = np.hstack([results_[cname],mute[1].data[cname]])
                                     except:
+                                 
                                         results_[cname] = np.hstack([results_[cname],mute[1].data[cname]])
                         mask =( ~np.isnan(results_['covariance'][:,0]))& (results_['covariance'][:,0]>0.) 
                         if config['match_to_gold']:

@@ -64,9 +64,7 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
             tab_detections.images[index].zero_padd_psf()
 
              
-            #Interpolates ther images over masked pixels
-            if config['interp_masking']:
-                tab_detections.images[index].deal_with_bmask(use_COADD_only = config['COADD_only'])
+
             bands_not_masked = tab_detections.images[index].check_mfrac(limit=config['frac_limit'], use_COADD_only = config['COADD_only'])
 
             if config['subtract_background']:
@@ -86,14 +84,21 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
                         M[u:-u,u:-u] = 1.
                         tab_detections.images[index].psf[b][i] *= M
 
-
-            if len(bands_not_masked) < config['minimum_number_of_bands']:
+            #print (bands_not_masked)
+            proceed = False
+            if type(config['minimum_number_of_bands']) == np.int:
+                if len(bands_not_masked) < config['minimum_number_of_bands']:
+                    proceed = False
+            else:
+                if sum([u in bands_not_masked for u in config['minimum_number_of_bands']]) == len(config['minimum_number_of_bands']):
+                    proceed = True
+            if not proceed:
                 #print ('too many pixels masked')
                 tab_detections.images[index].flags += 1
 
                 if config['debug']:
-                    for index_band in range(3):
-                        image_storage[index][index_band] = [tab_detections.images[index].imlist[index_band],0.,tab_detections.images[index].seglist[index_band]]
+                    for index_band in range(len(bands)):
+                        image_storage[index][index_band] = [tab_detections.images[index].imlist[index_band],0.,tab_detections.images[index].seglist[index_band],proceed,bands_not_masked,config['minimum_number_of_bands']]
                     
             else:
 
@@ -101,17 +106,32 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
 
                 if config['MOF_subtraction']:
                     tab_detections.render_MOF_models(index = index, render_self = False, render_others = True)
+                #Interpolates ther images over masked pixels
+                if config['interp_masking']:
+                    tab_detections.images[index].deal_with_bmask(use_COADD_only = config['COADD_only'])
+                
                 mute_range = [index,index+1]
 
                 try:
                     tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = True, flags = 0, MOF_subtraction = config['MOF_subtraction'], band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'])
                     mom, meb = tab_detections.images[index].moments.get_moment(0.,0.,returnbands=True)
-                    tab_detections_out.images[index] = copy.deepcopy(tab_detections.images[index])
+                    
             
 
                     if config['debug']:
-                        for index_band in range(3):
-                            image_storage[index][index_band] = [tab_detections.images[index].imlist[index_band],tab_detections.images[index].MOF_model_rendered[index_band],tab_detections.images[index].seglist[index_band]]
+                        for index_band in range(len(bands)):
+                            image_storage[index][index_band] = [tab_detections.images[index].imlist[index_band],tab_detections.images[index].MOF_model_rendered[index_band],tab_detections.images[index].seglist[index_band],proceed,bands_not_masked,config['minimum_number_of_bands']]
+                         
+                    # mf per band +++++++++++++++=
+                    mf_per_band = np.array([-999]*len(config['bands']))
+                    index_band =[]
+                    for b_ in bands_not_masked:
+                        index_band.append(np.arange(len(config['bands']))[np.array(np.in1d(config['bands'],b_))])
+                    index_band = np.array(index_band)
+                    mf_per_band[index_band] = meb_[:,0]
+                    tab_detections.images[index].mf_per_band = mf_per_band
+                    tab_detections_out.images[index] = copy.deepcopy(tab_detections.images[index])
+                                        
                 except:
                     pass
                     
@@ -316,6 +336,7 @@ def pipeline(config, output_folder,params_template, bands, dictionary_runs, coun
                         count +=1
                         save__[index] = dict()
                         save__[index]['moments'] = tub.images[index].moments
+                        save__[index]['mf_per_band'] = tub.images[index].mf_per_band
                         save__[index]['index_gal'] = tub.images[index].image_ID[0]
                         save__[index]['index'] = tub.images[index].image_ID[0]
                         try:
@@ -462,10 +483,10 @@ def measure_moments_templates(output_folder,**config):
         while run_count<len(list_run):
       
             if  run_count<len(list_run):
-                try:
+                #try:
                     pipeline(config, output_folder, params_template, bands, dictionary_runs, list_run[(run_count)],MOF_deep_field,deep_fields_catalog)
-                except:
-                    pass
+                #except:
+                #    pass
             run_count+=1
        
 

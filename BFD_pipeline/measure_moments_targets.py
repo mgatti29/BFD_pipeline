@@ -284,6 +284,10 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
             tab_targets.psf_M1= []
             tab_targets.psf_M2= []
             tab_targets.AREA= []
+            tab_targets.bkg = []
+            tab_targets.len_v = []
+            
+           
 
             tab_targets.band1 = []
             tab_targets.band2 = []
@@ -328,6 +332,9 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                 if config['MOF_subtraction']:
                     print ('pre checks MOF subtraction')
                     idx_n_array = []
+                    for index in frogress.bar(range(chunk_range[0],chunk_range[1])):
+                        idx_n_array.append(index)
+                    
                     for index in frogress.bar(range(chunk_range[0],chunk_range[1])):
                         
                         
@@ -392,15 +399,13 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                         # check masked bands and only consider objects with 2+ bands not masked
                         bands_not_masked = tab_detections.images[index].check_mfrac(limit=config['frac_limit'], use_COADD_only = config['COADD_only'])
 
-                        if config['interp_masking']:
-                            #Interpolates ther images over masked pixels
-                            
-                            tab_detections.images[index].deal_with_bmask(use_COADD_only = config['COADD_only'])
 
 
                         #subtract background
+                        bckg_flag = 0
+                        
                         if config['subtract_background']:
-                            tab_detections.images[index].subtract_background()
+                            bkg,len_v = tab_detections.images[index].subtract_background()
                         #computes noise based on mask and weightmap, and then discard them.
                         tab_detections.images[index].compute_noise()
 
@@ -419,13 +424,28 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                     tab_detections.images[index].psf[b][i] *= M
                         tab_detections.images[index].zero_padd_psf()
 
-
-                        if len(bands_not_masked) < config['minimum_number_of_bands']:
+                        
+                        proceed = False
+                        if type(config['minimum_number_of_bands']) == np.int:
+                            if len(bands_not_masked) < config['minimum_number_of_bands']:
+                                proceed = False
+                        else:
+                            if sum([u in bands_not_masked for u in config['minimum_number_of_bands']]) == len(config['minimum_number_of_bands']):
+                                proceed = True
+                    
+                    
+                        if not proceed:
                             #print ('too many pixels masked')
                             tab_detections.images[index].flags = 1
                         else:
                             if config['MOF_subtraction']:
                                 tab_detections.render_MOF_models(index = index, render_self = False, render_others = True,use_COADD_only = config['COADD_only'])
+                                
+                                
+                            if config['interp_masking']:
+                                #Interpolates ther images over masked pixels
+                                tab_detections.images[index].deal_with_bmask(use_COADD_only = config['COADD_only'])
+
                             mute_range = [index,index+1]
 
                             image_storage[index] = dict()
@@ -448,19 +468,11 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
 
                             mom, meb = tab_detections.images[index].moments.get_moment(0.,0.,returnbands=True)
 
+                            
+                            #*************
                             covm_even,covm_odd,covm_even_all,covm_odd_all = tab_detections.images[index].moments.get_covariance(returnbands=True)
-
                             covgal = covm_even,covm_odd
                             covgal_per_band = covm_even_all,covm_odd_all 
-                            if covgal_per_band is not None:
-
-                                cov_even_save_per_band = []
-                                cov_odd_save_per_band = []
-                                for ii in range(covgal_per_band[0].shape[0]):
-                                    cov_even_save_per_band.extend(covgal_per_band[0][ii][ii:])
-                                for ii in range(covgal_per_band[1].shape[0]):
-                                    cov_odd_save_per_band.extend(covgal_per_band[1][ii][ii:])
-
 
 
                             count+=1
@@ -476,7 +488,23 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             tab_targets.dec.append(newcent[1])
 
                             meb_ = np.array([m_.even for m_ in meb])
-                            tab_targets.meb.append(meb_[:,0])
+                            mf_per_band = np.array([-999]*len(config['bands']))
+                            cov_per_band = np.array([-999]*len(config['bands']))
+                            
+                            
+                            
+                            index_band =[]
+                            for b_ in bands_not_masked:
+                                index_band.append(np.arange(len(config['bands']))[np.array(np.in1d(config['bands'],b_))][0])
+                            index_band = np.array(index_band)
+                            try:
+                                mf_per_band[index_band] = meb_[:,0]
+                                cov_per_band[index_band] = covgal_per_band[0][0,0]
+                            except:
+                                print ( '\n ',(meb_[:,0],mf_per_band),index_band,'\n ')
+                            
+                            
+                            tab_targets.meb.append(mf_per_band)
                             try:
                                 tab_targets.true_fluxes.append(fluxes)
                             except:
@@ -489,9 +517,12 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             tab_targets.psf_Mr.append(Mr)
                             tab_targets.psf_M1.append(M1)
                             tab_targets.psf_M2.append(M2)
-
-                            tab_targets.cov_odd_per_band.append(cov_odd_save_per_band)
-                            tab_targets.cov_even_per_band.append(cov_even_save_per_band)
+                            tab_targets.bkg.append(bkg)
+                            tab_targets.len_v.append(len_v)
+                            
+                             
+                            #tab_targets.cov_odd_per_band.append(cov_odd_save_per_band)
+                            tab_targets.cov_even_per_band.append(cov_per_band)
 
                             nn = np.array([tab_detections.images[index].noise_rms[index_band][0] for index_band in range(tab_detections.images[index].n_bands)])
 
@@ -506,7 +537,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                   
                             if index%100==0:
                                 if config['add_detection_stamp']:
-                                    if len(bands_not_masked) >= config['minimum_number_of_bands']:
+                                    if proceed:
                                         #print ('adding detection stamp')
                                         
                                         # add detection stamp **************************************+++++
@@ -514,7 +545,8 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         tab_detections.images[index].make_WCS()
                                         tab_detections.images[index].make_false_stamp(use_COADD_only=config['COADD_only'])
                                         tab_detections.images[index].zero_padd_psf()
-
+                                        tab_targets.bkg.append(bkg)
+                                        tab_targets.len_v.append(len_v)
 
                                         mute_range = [index,index+1]
 
@@ -526,11 +558,39 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                        # tab_targets.p0_PSF.append(p0_PSF)
 
 
+                                                #*************
+                                        covm_even,covm_odd,covm_even_all,covm_odd_all = tab_detections.images[index].moments.get_covariance(returnbands=True)
+                                        covgal = covm_even,covm_odd
+                                        covgal_per_band = covm_even_all,covm_odd_all 
+                            
+                            
+                            
                                         tab_targets.ra.append(newcent[0])
                                         tab_targets.dec.append(newcent[1])
 
                                         meb_ = np.array([m_.even for m_ in meb])
-                                        tab_targets.meb.append(meb_[:,0])
+                                        
+                          
+                                        mf_per_band = np.array([-999]*len(config['bands']))
+                                        cov_per_band = np.array([-999]*len(config['bands']))
+                                
+                                        index_band =[]
+                                        for b_ in bands_not_masked:
+                                            index_band.append(np.arange(len(config['bands']))[np.array(np.in1d(config['bands'],b_))])
+                                        index_band = np.array(index_band)
+                                        mf_per_band[index_band] = meb_[:,0]
+                                        cov_per_band[index_band] = covgal_per_band[0][0,0]
+                                        
+                                        
+                                        
+                                        
+                                        
+
+                                        
+                                        
+                                        
+                                        
+                                        tab_targets.meb.append(mf_per_band)
 
                                         try:
                                             tab_targets.true_fluxes.append(fluxes)
@@ -545,9 +605,9 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         tab_targets.psf_Mr.append(Mr)
                                         tab_targets.psf_M1.append(M1)
                                         tab_targets.psf_M2.append(M2)
-
-                                        tab_targets.cov_odd_per_band.append(cov_odd_save_per_band)
-                                        tab_targets.cov_even_per_band.append(cov_even_save_per_band)
+                                        
+                                        #tab_targets.cov_odd_per_band.append(cov_odd_save_per_band)
+                                        tab_targets.cov_even_per_band.append(cov_per_band)
 
                                         try:
                                             tab_targets.des_id.append(params_image_sims[p0]['des_id'])
