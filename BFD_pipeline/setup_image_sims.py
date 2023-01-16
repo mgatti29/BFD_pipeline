@@ -1,6 +1,5 @@
 from .read_meds_utils import MOF_table
 from .utilities import update_progress, save_obj, load_obj
-import pyfits as pf
 import numpy as np
 import timeit
 import pickle
@@ -8,6 +7,7 @@ import sys
 import pandas as pd
 import os
 import math
+from astropy.io import fits
 
 def setup_image_sims(output_folder,**config):
     if config['MPI']:

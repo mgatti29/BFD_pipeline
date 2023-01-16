@@ -8,7 +8,6 @@ from .utilities import update_progress, save_obj, load_obj
 import glob
 import numpy as np
 import pandas as pd
-import pyfits as pf
 from matplotlib import pyplot as plt
 import ngmix.gmix as gmix
 import ngmix           

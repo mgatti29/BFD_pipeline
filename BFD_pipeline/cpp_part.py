@@ -1,12 +1,10 @@
 import numpy as np
 
-import pyfits as pf
 import os
 import frogress
 import copy
 import math
 import astropy.io.fits as fits
-import pyfits as pf
 import frogress
 import multiprocessing
 from functools import partial
