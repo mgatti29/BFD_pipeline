@@ -165,7 +165,7 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
 
             try:
             #if 1==1:
-                templates_overview = pf.open(output_folder+'/templates_overview.fits')
+                templates_overview = fits.open(output_folder+'/templates_overview.fits')
                 mfverview = templates_overview[1].data['moments'][:,0]
                 idverview = templates_overview[1].data['index_gal']
                 class_w = templates_overview[1].data['class']
@@ -357,17 +357,17 @@ def make_templates(output_folder,**config):
             
         
         if not sims:
-            #targets = pf.open(output_folder+'/targets_sample_g.fits')
+            #targets = fits.open(output_folder+'/targets_sample_g.fits')
             deep_files = glob.glob(output_folder+'/templates/'+'/t*.pkl')
 
         else:
-            #targets = pf.open(output_folder+'/ISp_targets_sample_g.fits')
+            #targets = fits.open(output_folder+'/ISp_targets_sample_g.fits')
             deep_files = glob.glob(output_folder+'/templates/'+'/IS*.pkl')
 
         # number of entries:
 
         #Let's open the noisetier file.
-        NT_ = pf.open(output_folder+'/noisetiers.fits')
+        NT_ = fits.open(output_folder+'/noisetiers.fits')
  
         noisetier = len(NT_)-1
         t_entries = np.arange(noisetier)
@@ -571,7 +571,7 @@ def make_templates(output_folder,**config):
         e_,o_ = rotate(moments[:,:].T,moments[:,:2].T,phi)
         new_DV = np.hstack([e_,o_])
         # load noisetiers ------
-        nt = pf.open(output_folder+'/noisetiers.fits')
+        nt = fits.open(output_folder+'/noisetiers.fits')
 
         #cholesky decomposition of the best tier
         u,o = bulkUnpack(nt[1].data['COVARIANCE'][:,:])
@@ -619,7 +619,7 @@ def make_templates(output_folder,**config):
         e_,o_ = rotate(moments[:,:].T,moments[:,:2].T,phi)
         new_DV = np.hstack([e_,o_])
         # load noisetiers ------
-        nt = pf.open(output_folder+'/noisetiers.fits')
+        nt = fits.open(output_folder+'/noisetiers.fits')
 
 
         #cholesky decomposition of the worst tier
@@ -747,7 +747,7 @@ def make_templates(output_folder,**config):
         
         if config['reduce_input_files']:
             try:
-                templates_overview = pf.open(output_folder+'/templates_overview.fits')
+                templates_overview = fits.open(output_folder+'/templates_overview.fits')
                 mfverview = templates_overview[1].data['moments'][:,0]
                 idverview = templates_overview[1].data['index_gal']
                 class_w = templates_overview[1].data['class']

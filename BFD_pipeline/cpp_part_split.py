@@ -105,10 +105,10 @@ def cpp_part(output_folder,**config):
                         noise_tiers = np.arange(0,len(noise_tiers))
                         for i_ in range(len(noise_tiers)):
                             mx = fits.open('{0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[i_]))
-                            try:
-                                m[i_+1] = mx[i_+1]
-                            except:
-                                m.append(mx[i_+1])
+                            # try:
+                            #     m[i_+1] = mx[i_+1]
+                            # except:
+                            m.append(mx[i_+1])
 
 
                                 
@@ -127,7 +127,7 @@ def cpp_part(output_folder,**config):
                                     pass
         
                             u.append(u_)
-                        u.writeto(output_folder+'/noisetiers.fits',clobber = True)# 
+                        u.writeto(output_folder+'/noisetiers.fits',overwrite = True)# 
                             
                     comm.bcast(run_count,root = 0)
                     comm.Barrier() 
@@ -214,7 +214,7 @@ def cpp_part(output_folder,**config):
                                     targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank))
                                 except:
                                     try:
-                                        targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank),clobber = True)# 
+                                        targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank),overwrite = True)# 
                                     except:
                                         pass
                             run_count+=comm.size
@@ -276,7 +276,8 @@ def cpp_part(output_folder,**config):
                                     targets_i.writeto(output_folder+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count+comm.rank]))
                                 except:
                                     try:
-                                        targets_i.writeto(output_folder+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count+comm.rank]),clobber = True)# 
+                                        targets_i.writeto(output_folder+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count+comm.rank]), overwrite = True)# 
+                                        
                                     except:
                                         pass
                             run_count+=comm.size
@@ -351,7 +352,7 @@ def cpp_part(output_folder,**config):
                                             templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n))
                                         except:
                                             try:
-                                                templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n),clobber = True)# 
+                                                templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n),overwrite = True)# 
                                             except:
                                                 pass
 
@@ -408,7 +409,7 @@ def cpp_part(output_folder,**config):
                                             targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count+comm.rank],n,tt))
                                         except:
                                             #try:
-                                                targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count+comm.rank],n,tt),clobber = True)# 
+                                                targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count+comm.rank],n,tt),overwrite = True)# 
                                             #except:
                                             #    pass
                             run_count+=comm.size
@@ -676,7 +677,7 @@ def cpp_part(output_folder,**config):
                                 targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add))
                             except:
                                 try:
-                                    targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add),clobber = True)# 
+                                    targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add),overwrite = True)# 
                                 except:
                                     pass
 #

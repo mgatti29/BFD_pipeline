@@ -146,6 +146,6 @@ def collapse(path):
                 hdulist.writeto(path+'.fits')
             except:
                 try:
-                    hdulist.writeto(path+'.fits',clobber = True)# 
+                    hdulist.writeto(path+'.fits', overwrite = True)# 
                 except:
                     pass

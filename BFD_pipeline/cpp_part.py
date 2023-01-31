@@ -88,7 +88,7 @@ def cpp_part(output_folder,**config):
             path_templates = config['output_folder']
             target = path_templates+'/{0}targets_sample_g.fits'.format(add)
             if os.path.exists(target):
-                targets = pf.open(target)
+                targets = fits.open(target)
                 #print (target)
                 try:
                     noise_tiers = np.array(config['noise_tiers'])
@@ -141,10 +141,10 @@ def cpp_part(output_folder,**config):
 
                     comm = MPI.COMM_WORLD
                     if comm.rank==0:
-                        m = pf.open('{0}/noisetiers.fits'.format(output_folder))
+                        m = fits.open('{0}/noisetiers.fits'.format(output_folder))
                         noise_tiers = np.arange(0,len(noise_tiers))
                         for i_ in range(len(noise_tiers)):
-                            mx = pf.open('{0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[i_]))
+                            mx = fits.open('{0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[i_]))
                             try:
                                 m[i_+1] = mx[i_+1]
                             except:
@@ -155,9 +155,9 @@ def cpp_part(output_folder,**config):
                                 
 
                         prihdu = fits.PrimaryHDU()
-                        u = pf.HDUList([pf.PrimaryHDU()])
+                        u = fits.HDUList([fits.PrimaryHDU()])
                         for i in range(len(m)-1):
-                            u_ = pf.BinTableHDU.from_columns(m[i+1].columns)
+                            u_ = fits.BinTableHDU.from_columns(m[i+1].columns)
                             keys_ = ['TIER_NUM','EXTNAME','COVMXMX','COVMXMY','COVMYMY','SIG_XY','SIG_FLUX','STARTA00','STEPA00','INDEXA00','STARTA01','STEPA01','INDEXA01','MONO_1_0','MONO_1_1','MONO_2_0','MONO_2_1','MONO_3_0','MONO_3_1','ELLIP_1','ELLIP_2','FLUX_MIN','FLUX_MAX','WT_N','WT_SIGMA']
 
                             for k in keys_:
@@ -167,7 +167,7 @@ def cpp_part(output_folder,**config):
                                     pass
         
                             u.append(u_)
-                        u.writeto(output_folder+'/noisetiers.fits',clobber = True)# 
+                        u.writeto(output_folder+'/noisetiers.fits',overwrite = True)# 
                             
                     comm.bcast(run_count,root = 0)
                     comm.Barrier() 
@@ -212,13 +212,13 @@ def cpp_part(output_folder,**config):
                             cols = [] 
                             for k in c:
                                 try:
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end,:]))
+                                    cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end,:]))
                                 except:
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end]))
+                                    cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name][start:end]))
 
 
-                            new_cols = pf.ColDefs(cols)
-                            hdu = pf.BinTableHDU.from_columns(new_cols)
+                            new_cols = fits.ColDefs(cols)
+                            hdu = fits.BinTableHDU.from_columns(new_cols)
                             targets_i[1] = hdu
                             targets_i[1].header[hdrkeys['weightN']] = targets[1].header[hdrkeys['weightN']]
                             targets_i[1].header[hdrkeys['weightSigma']] = targets[1].header[hdrkeys['weightSigma']]
@@ -228,7 +228,7 @@ def cpp_part(output_folder,**config):
 
                             for tier in range(2,len(targets)):
                                 data = copy.copy(targets[tier].data)
-                                hdu = pf.ImageHDU(data)
+                                hdu = fits.ImageHDU(data)
                                 hdu.header[hdrkeys['weightN']] =   targets[0].header[hdrkeys['weightN']]
                                 hdu.header[hdrkeys['weightSigma']] = targets[0].header[hdrkeys['weightSigma']]
                                 hdu.header['TIERNAME'] = targets[tier].header['TIERNAME']
@@ -247,7 +247,7 @@ def cpp_part(output_folder,**config):
                                 targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank))
                             except:
                                 try:
-                                    targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank),clobber = True)# 
+                                    targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank),overwrite = True)# 
                                 except:
                                     pass
                         run_count+=comm.size
@@ -266,7 +266,7 @@ def cpp_part(output_folder,**config):
 
                     for  run_count in range(chunks):
                         targetfile = output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count)
-                        targetfile_ = pf.open(targetfile)
+                        targetfile_ = fits.open(targetfile)
                         t_ = []
                         try:
                             for t in  np.array(targetfile_[1].header['HISTORY']):
@@ -310,22 +310,23 @@ def cpp_part(output_folder,**config):
         for add in add_labels:
             path_templates = config['output_folder']
             target = path_templates+'/{0}targets_sample_g.fits'.format(add)
+            print(os.path.exists(target))
             if os.path.exists(target):
                 run_count = 0
                 comm = MPI.COMM_WORLD
                 if 'assemble' in todos:
-
+                    print(comm.rank)
                     if comm.rank==0:
-                        
+                            
                             target = path_templates+'/{0}targets_sample_g.fits'.format(add)
-                            targets = pf.open(target)
+                            targets = fits.open(target)
                             len_targets = len(targets[1].data['ID'])
                             pqr = np.zeros((len_targets,6))
                             NUNIQUE = np.zeros(len_targets)
                             count =0
                             for i in range(chunks):
                                 
-                                targets_i = pf.open(path_templates+'/{0}targets_sample_g_{1}.fits'.format(add,i))
+                                targets_i = fits.open(path_templates+'/{0}targets_sample_g_{1}.fits'.format(add,i))
                                 print (path_templates+'/{0}targets_sample_g_{1}.fits'.format(add,i))
                                 try:
                                     NUNIQUE[count:count+len(targets_i[1].data['ID'])] = targets_i[1].data['NUNIQUE']
@@ -348,29 +349,29 @@ def cpp_part(output_folder,**config):
                                 pass
                             for k in c:
                                 if k.name == 'PQR':
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=pqr))
+                                    cols.append(fits.Column(name=k.name,format=k.format,array=pqr))
                                 elif k.name == 'NUNIQUE':
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=NUNIQUE))
+                                    cols.append(fits.Column(name=k.name,format=k.format,array=NUNIQUE))
                                 else:
-                                    cols.append(pf.Column(name=k.name,format=k.format,array=targets[1].data[k.name]))
+                                    cols.append(fits.Column(name=k.name,format=k.format,array=targets[1].data[k.name]))
 
                             if sum([cc.name=='PQR' for cc in cols]) ==0:
-                                cols.append(pf.Column(name='PQR',format='6E',array=pqr))
+                                cols.append(fits.Column(name='PQR',format='6E',array=pqr))
 
                             if sum([cc.name=='NUNIQUE' for cc in cols]) ==0:
-                                cols.append(pf.Column(name='NUNIQUE',format='1J',array=NUNIQUE))
+                                cols.append(fits.Column(name='NUNIQUE',format='1J',array=NUNIQUE))
 
 
 
-                            new_cols = pf.ColDefs(cols)
-                            hdu = pf.BinTableHDU.from_columns(new_cols)
+                            new_cols = fits.ColDefs(cols)
+                            hdu = fits.BinTableHDU.from_columns(new_cols)
                             targets_i[1] = hdu
                             targets_i[1].header[hdrkeys['weightN']] = targets[1].header[hdrkeys['weightN']]
                             targets_i[1].header[hdrkeys['weightSigma']] = targets[1].header[hdrkeys['weightSigma']]
 
                             for tier in range(2,len(targets)):
                                 data = copy.copy(targets[tier].data)
-                                hdu = pf.ImageHDU(data)
+                                hdu = fits.ImageHDU(data)
                                 
                                 
                                 hdu.header[hdrkeys['weightN']] =   targets[0].header[hdrkeys['weightN']]
@@ -390,7 +391,7 @@ def cpp_part(output_folder,**config):
                                 targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add,i))
                             except:
                                 try:
-                                    targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add,i),clobber = True)# 
+                                    targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add,i),overwrite = True)# 
                                 except:
                                     pass
 
@@ -410,7 +411,7 @@ def cpp_part(output_folder,**config):
                     results = dict()
                     for add in add_labels:
                         target = path_templates+'/{0}targets_sample_g.fits'.format(add)
-                        targets = pf.open(target)
+                        targets = fits.open(target)
                         p, q, r, mask= make_pqr(targets[1].data['PQR'])
                         
                         results[add] = dict()

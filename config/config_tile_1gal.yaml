@@ -15,9 +15,9 @@
 
 run:
      - make_tiles_tt
-     #- make_targets
-     #- make_templates
-     #- cpp_part
+     - make_targets
+     - make_templates
+     - cpp_part
 ##
 ######################################################################
 #                       general config
@@ -25,7 +25,7 @@ run:
 
 
 general:
-    output_folder: '/global/cscratch1/sd/mgatti/BFD/tiles_noblends_mask_effects_01/'
+    output_folder: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01_KBH/'
     # bfd settings ********
     n: 4.     #Default:  4.
     sigma: 0.55  # Default: 0.55
@@ -48,7 +48,7 @@ make_tiles_tt:
     n_targets: 60000 # the *total* number of injected targets will be n_targets * number_of replicas. For templates number_of_replicas is ignored.  
     n_templates: 2000 #
     
-    models: '/global/u2/m/mgatti/BFD_pipeline/data/all_100k_1_size.npy' # models used to inject galaxies.
+    models: '/global/homes/v/vwetzell/git_repos/BFD_pipeline/data/all_100k_1_size.npy' # models used to inject galaxies.
     size_treshold: 1. # exclude models too big (size bigger than 1. arcsec).
 
     # noise of targets & templates ********
@@ -71,7 +71,7 @@ make_tiles_tt:
     noiseless: False #if True, tiles won't have noise.
 
 
-    mask_data: '/global/cscratch1/sd/mgatti/BFD/tiles_noblends_bkg_mask' #set it to False to not have mask effects.
+    mask_data: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01_KBH/' #set it to False to not have mask effects.
     interpolate_mask: False #it corrects masked pixels with galaxy models (either from shredder or the true models)
     mfrac: 0.1 #maximum masked fraction allowed - 0.1 typical for real cases.
     background: 0. #it adds a background to the tile
@@ -128,4 +128,4 @@ cpp_part:
     option: default #options: default,noisetiers,noisetiers_chunks. In general, noisetiers_chunks recommended with multiple noisetiers and many templates.
     add_labels: ['ISp_','ISm_'] 
     stage: ['selection','selection_ave','split','integrate','assemble'] 
-    path_cpp: '/global/project/projectdirs/des/BFD_Y6/bfd/bin/'
+    path_cpp: '/global/homes/v/vwetzell/git_repos/bfd/bin/'
