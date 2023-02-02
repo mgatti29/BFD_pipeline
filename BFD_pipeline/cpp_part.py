@@ -342,11 +342,11 @@ def cpp_part(output_folder,**config):
                             try:
                                 c['PQR'].array=pqr
                             except:
-                                pass
+                                raise ValueError('PQR not in targets')
                             try:
                                 c['NUNIQUE'].array=NUNIQUE
                             except:
-                                pass
+                                raise ValueError('NUNIQUE not in targets')
                             for k in c:
                                 if k.name == 'PQR':
                                     cols.append(fits.Column(name=k.name,format=k.format,array=pqr))
