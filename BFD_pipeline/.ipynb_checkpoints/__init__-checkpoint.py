@@ -5,5 +5,5 @@ from .measure_moments_templates import measure_moments_templates
 from .read_meds_utils import Image, MOF_table, DetectionsTable
 from .make_targets import make_targets
 from .make_templates import make_templates
-from .cpp_part import cpp_part
+from .cpp_part_split import cpp_part
 from .make_tiles_tt import make_tiles_tt
