@@ -6,7 +6,7 @@ import frogress
 import copy
 import math
 import astropy.io.fits as fits
-
+import glob
 import frogress
 import multiprocessing
 from functools import partial
@@ -38,6 +38,26 @@ def find_close_neighbours(target_list,template_list):
 def cpp_part(output_folder,**config):
     config['output_folder'] = output_folder
     path_cpp = config['path_cpp']
+    
+    
+    try:
+    
+        config['medium_SN']
+        config['noise_factor']
+    except:
+        config['medium_SN'] = 45 
+        config['noise_factor'] =   3
+        
+    
+    medium_SN = config['medium_SN']
+    noise_factor = config['noise_factor']
+    
+    try:
+        config['selection_external_file']
+    except:
+         config['selection_external_file'] = False
+                      
+                            
     if config['MPI']:
         from mpi4py import MPI 
     try: 
@@ -127,7 +147,7 @@ def cpp_part(output_folder,**config):
                                     pass
         
                             u.append(u_)
-                        u.writeto(output_folder+'/noisetiers.fits',clobber = True)# 
+                        u.writeto(output_folder+'/noisetiers.fits',overwrite = True)# 
                             
                     comm.bcast(run_count,root = 0)
                     comm.Barrier() 
@@ -142,7 +162,10 @@ def cpp_part(output_folder,**config):
                     if comm.rank==0:
                         print ('re-assembly everything')
                                     
-                        targetfile = output_folder+'/{0}targets_sample_g.fits'.format(add,run_count+comm.rank)
+                        if config['selection_external_file']:
+                            targetfile = config['selection_external_file']
+                        else:
+                            targetfile = output_folder+'/{0}targets_sample_g.fits'.format(add,run_count+comm.rank)
                         noistierfile = output_folder+'noisetiers.fits'
                         str_ = 'python BFD_pipeline/assignSelection.py {0} {1}'.format(noistierfile,targetfile)
                         os.system(str_)
@@ -214,7 +237,7 @@ def cpp_part(output_folder,**config):
                                     targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank))
                                 except:
                                     try:
-                                        targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank),clobber = True)# 
+                                        targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank),overwrite = True)# 
                                     except:
                                         pass
                             run_count+=comm.size
@@ -276,7 +299,7 @@ def cpp_part(output_folder,**config):
                                     targets_i.writeto(output_folder+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count+comm.rank]))
                                 except:
                                     try:
-                                        targets_i.writeto(output_folder+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count+comm.rank]),clobber = True)# 
+                                        targets_i.writeto(output_folder+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count+comm.rank]),overwrite = True)# 
                                     except:
                                         pass
                             run_count+=comm.size
@@ -351,7 +374,7 @@ def cpp_part(output_folder,**config):
                                             templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n))
                                         except:
                                             try:
-                                                templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n),clobber = True)# 
+                                                templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[run_count+comm.rank],n),overwrite = True)# 
                                             except:
                                                 pass
 
@@ -408,7 +431,7 @@ def cpp_part(output_folder,**config):
                                             targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count+comm.rank],n,tt))
                                         except:
                                             #try:
-                                                targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count+comm.rank],n,tt),clobber = True)# 
+                                                targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count+comm.rank],n,tt),overwrite = True)# 
                                             #except:
                                             #    pass
                             run_count+=comm.size
@@ -427,10 +450,13 @@ def cpp_part(output_folder,**config):
                     
                     
                    # read all the targets classes from the targets files --------
-                    class_targets = targets[1].data['class']
-                    types_targets = np.unique(class_targets[class_targets!='-100_-100_-100'])
-                    chunks = len(types_targets)
-                    
+                    try:
+                        class_targets = targets[1].data['class']
+                        types_targets = np.unique(class_targets[class_targets!='-100_-100_-100'])
+                
+                        chunks = len(types_targets)
+                    except:
+                        pass
                     if config['option'] == 'default':
                         '''
                         #chunks target, go through all the noisetiers.
@@ -444,7 +470,7 @@ def cpp_part(output_folder,**config):
                                         targetfile = output_folder+'/{0}targets_sample_g_{1}.fits'.format(add,run_count+comm.rank)
                                         noistierfile = output_folder+'noisetiers.fits'
                                         templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[u])
-                                        str_ = '{3}tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2}'.format(targetfile,noistierfile,templatesfile,path_cpp)
+                                        str_ = '{3}tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2} -addnoiseSN {4} -noiseFactor 1,{5}'.format(targetfile,noistierfile,templatesfile,path_cpp,medium_SN,noise_factor)
                                         os.system(str_)
                             run_count+=comm.size
                             comm.bcast(run_count,root = 0)
@@ -460,7 +486,7 @@ def cpp_part(output_folder,**config):
                                 targetfile = output_folder+'/nt_{0}targets_sample_g_{1}.fits'.format(add,noise_tiers[run_count+comm.rank])
                                 noistierfile = output_folder+'noisetiers.fits'
                                 templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[run_count+comm.rank])
-                                str_ = '{3}tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2}'.format(targetfile,noistierfile,templatesfile,path_cpp)
+                                str_ = '{3}tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2} -addnoiseSN {4} -noiseFactor 1,{5}'.format(targetfile,noistierfile,templatesfile,path_cpp,medium_SN,noise_factor)
                                 os.system(str_)
                             run_count+=comm.size
                             comm.bcast(run_count,root = 0)
@@ -471,6 +497,8 @@ def cpp_part(output_folder,**config):
                         run_count = 0
             
                         runstodo =[]
+
+                        
                         while run_count< len(noise_tiers):
                             if run_count<len(noise_tiers):
                                 templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[run_count])
@@ -495,15 +523,18 @@ def cpp_part(output_folder,**config):
 
                                         # try to see if it has been run already ----
                                         m_ = fits.open(targetfile)
-                                        #try:
-                                        #    m_[1].data['NUNIQUE']
-                                        #except:
-                                        if 1==1:
+                                        
+                                        try:
+                                            
+                                            m_[1].data['NUNIQUE']
+                                        except:
+                                       
                                             runstodo.append([run_count,n,tt])
                             run_count+=1
-                            
+
                         
                         run_count = 0
+                        
                         
                         while run_count< len(runstodo):
                             comm = MPI.COMM_WORLD
@@ -516,13 +547,14 @@ def cpp_part(output_folder,**config):
                                 targetfile = output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[xx],n,tt)
                                  # try to see if it has been run already ----
                                 m_ = fits.open(targetfile)
-                                #try:
-                                #    m_[1].data['NUNIQUE']
-                                #except:
-                                if 1==1:
+                                try:
+                                #    nou
+                                    m_[1].data['NUNIQUE']
+                                except:
+                                #if 1==1:
                                     noistierfile = output_folder+'noisetiers.fits'
                                     templatesfile = output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[xx],n)
-                                    str_ = '{3}/tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2}'.format(targetfile,noistierfile,templatesfile,path_cpp)
+                                    str_ = '{3}/tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2} -addnoiseSN {4} -noiseFactor 1,{5}'.format(targetfile,noistierfile,templatesfile,path_cpp,medium_SN,noise_factor)
                                     os.system(str_)
                             run_count+=comm.size
                             comm.bcast(run_count,root = 0)
@@ -605,6 +637,7 @@ def cpp_part(output_folder,**config):
                                             start = (tt)*config['bacth_size_targets']
                                             end = min([len(mask[mask]),(tt+1)*config['bacth_size_targets']])
 
+                                            #if 1==1:
                                             try:
                                                 targets_i = fits.open(path_templates+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt))  
                                                 ma = np.in1d(np.arange(len(mask_targets)),np.arange(len(mask_targets))[mask_targets][start:end][targets_i[1].data['SELECT']])
@@ -615,7 +648,7 @@ def cpp_part(output_folder,**config):
                                                 NUNIQUE[ma] = targets_i[1].data['NUNIQUE'][~targets_i[1].data['SELECT']]
                                                 pqr[ma] = targets_i[1].data['PQR'][~targets_i[1].data['SELECT']]
                                             except:
-                                                print  ('failed ---: ',path_templates+'/{0}targets_sample_g_{1}_{2}.fits'.format(add,noise_tiers[run_count],n))
+                                                print  ('failed ---: ',path_templates+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt))
 
 
 
@@ -676,7 +709,7 @@ def cpp_part(output_folder,**config):
                                 targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add))
                             except:
                                 try:
-                                    targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add),clobber = True)# 
+                                    targets_i.writeto(output_folder+'/{0}targets_sample_g.fits'.format(add),overwrite = True)# 
                                 except:
                                     pass
 #
