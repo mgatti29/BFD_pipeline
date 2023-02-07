@@ -25,7 +25,7 @@ run:
 
 
 general:
-    output_folder: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01_KBH_1/'
+    output_folder: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01_KBH/'
     # bfd settings ********
     n: 4.     #Default:  4.
     sigma: 0.55  # Default: 0.55
@@ -71,7 +71,7 @@ make_tiles_tt:
     noiseless: False #if True, tiles won't have noise.
 
 
-    mask_data: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01_KBH_1/' #set it to False to not have mask effects.
+    mask_data: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01_KBH/' #set it to False to not have mask effects.
     interpolate_mask: False #it corrects masked pixels with galaxy models (either from shredder or the true models)
     mfrac: 0.1 #maximum masked fraction allowed - 0.1 typical for real cases.
     background: 0. #it adds a background to the tile
@@ -98,7 +98,7 @@ make_targets:
     sn_max: 30.
     Mf_max: 90000
     Mf_min: 0.
-    re_run_noisetiers: True
+    # re_run_noisetiers: True
 
 
 ######################################################################

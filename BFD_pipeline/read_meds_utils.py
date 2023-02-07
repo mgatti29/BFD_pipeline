@@ -17,7 +17,6 @@ import copy
 from scipy.interpolate import CloughTocher2DInterpolator
 import coord
 import galsim
-import astropy.io.fits as fits
 import frogress
 import shredder
 import esutil as eu
@@ -871,7 +870,6 @@ class Image:
         self.psf_params_average['g2'] /= wt
         self.psf_params_average['T']  /= wt
 
-import pyfits as pf
 class MOF_table:
     def __init__(self, path, shredder = False):
         '''
