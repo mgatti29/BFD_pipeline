@@ -266,7 +266,10 @@ class Image:
             self.imlist = [m.get_cutout_list(index) for m in meds]
    
         
-        
+
+
+            
+            
             # orig_row,col : original row & col in a given tile.
             self.orig_rowcol = [[ (meds[b]['orig_row'][index][i],meds[b]['orig_col'][index][i]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))] 
             self.orig_start_rowcol = [[ (meds[b]['orig_start_row'][index][i],meds[b]['orig_start_col'][index][i]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))] 
@@ -277,6 +280,16 @@ class Image:
             self.wtlist = [m.get_cutout_list(index, type='weight') for m in meds]
             self.masklist = [m.get_cutout_list(index, type='bmask') for m in meds]
             self.jaclist = [m.get_jacobian_list(index) for m in meds]
+            
+            #get ccd numbers ----
+            self.ccd_name =  [[ 1000*b+np.int((meds[b]._image_info['image_path'][meds[b]['file_id'][index][i]]).split('_')[2].strip('c')) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
+
+            # save DESDM coordinates ----
+            self.DESDM_coadd_x = [m['input_row'][index] for m in meds]
+            self.DESDM_coadd_y = [m['input_col'][index] for m in meds]
+            
+            
+
            
             try:
                 self.psf = [m.get_cutout_list(index, type='psf') for m in meds]
@@ -394,7 +407,7 @@ class Image:
                     pass
                 s0 = self.MOF_model_all_rendered[b][i].shape[0]
                 
-                self.imlist[b][i][bmask!=0] += (np.random.normal(size = (s0,s0))/np.sqrt(self.wtlist[b][i]))[bmask!=0]
+                self.imlist[b][i][(bmask!=0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))/np.sqrt(self.wtlist[b][i]))[(bmask!=0) & (self.wtlist[b][i]!=0.)]
                                                                 
                     
                 #self.imlist[b][i],_ = copy.copy(check_mask_and_interpolate(self.imlist[b][i],self.masklist[b][i]))
@@ -858,7 +871,7 @@ class Image:
         self.psf_params_average['g2'] /= wt
         self.psf_params_average['T']  /= wt
 
-from astropy.io import fits
+import pyfits as pf
 class MOF_table:
     def __init__(self, path, shredder = False):
         '''

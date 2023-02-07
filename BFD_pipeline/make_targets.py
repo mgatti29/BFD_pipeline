@@ -8,6 +8,7 @@ from .utilities import save_obj, load_obj
 import glob
 import numpy as np
 import pandas as pd
+import astropy.io.fits as fits
 from matplotlib import pyplot as plt
 import ngmix.gmix as gmix
 import ngmix           

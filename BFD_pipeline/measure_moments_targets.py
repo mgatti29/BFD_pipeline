@@ -300,6 +300,18 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
             tab_targets.cov_even_per_band = []
                     
             
+            tab_targets.DESDM_coadd_x = []
+            tab_targets.DESDM_coadd_y = []
+            
+            tab_targets.orig_row = []
+            tab_targets.orig_col = []
+            tab_targets.ccd_name = []
+            
+     
+            
+            
+            
+            
             m_array = [meds.MEDS(m_array[band]['meds']) for band in bands]
             chunk_range =  [int(chunk_size*iii),int(np.min([chunk_size*(iii+1),len_file]))] 
             start = timeit.default_timer()
@@ -387,11 +399,12 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             index = copy.copy(index_fixed)
                         else:
                             index = copy.copy(index_t)
-                        try:
+                        #try:
+                        if 1==1:
                             tab_detections.images[index].Load_MEDS(index, meds = m_array)
-                        except:
+                        #except:
 
-                            print (index,len(tab_detections.images),'   ')
+                        #    print (index,len(tab_detections.images),'   ')
                         # read WCS 
                         tab_detections.images[index].make_WCS()
                         #setup flag
@@ -521,6 +534,38 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             tab_targets.len_v.append(len_v)
                             
                              
+                                
+                                
+                                
+                            tab_targets.DESDM_coadd_x.append(tab_detections.images[index].DESDM_coadd_x)
+                            tab_targets.DESDM_coadd_y.append(tab_detections.images[index].DESDM_coadd_y)
+
+                            # let's initialise it as [12 x numb_bands] --
+                            
+                            orig_row_ = np.zeros(40)
+                            orig_col_ = np.zeros(40)
+                            ccd_name_ = -np.ones(40)
+                            
+                            
+                            u_1 = np.array([ll[0] for l in tab_detections.images[index].orig_rowcol for ll in l[1:]])
+                            u_2 = np.array([ll[1] for l in tab_detections.images[index].orig_rowcol for ll in l[1:]])
+                            u_3 = np.array([ll for l in tab_detections.images[index].ccd_name for ll in l])
+
+                            
+                            #print ('')
+                            #print (u_1)
+                            #print (u_2)
+                            #print (u_3)
+                            orig_row_[:len(u_1)] = u_1 
+                            orig_col_[:len(u_1)] = u_2 
+                            ccd_name_[:len(u_1)] = u_3 
+
+                            tab_targets.orig_row.append(orig_row_)
+                            tab_targets.orig_col.append(orig_col_)
+                            tab_targets.ccd_name.append(ccd_name_)
+            
+            
+            
                             #tab_targets.cov_odd_per_band.append(cov_odd_save_per_band)
                             tab_targets.cov_even_per_band.append(cov_per_band)
 
@@ -585,9 +630,24 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         
                                         
                                         
+                                        tab_targets.DESDM_coadd_x.append(0)
+                                        tab_targets.DESDM_coadd_y.append(0)
 
-                                        
-                                        
+                                        # let's initialise it as [12 x numb_bands] --
+
+                                        orig_row_ = np.zeros(40)
+                                        orig_col_ = np.zeros(40)
+                                        ccd_name_ =  -np.ones(40)
+
+
+
+
+                                        tab_targets.orig_row.append(rig_row_)
+                                        tab_targets.orig_col.append(rig_col_)
+                                        tab_targets.ccd_name.append(cd_name_)
+
+
+
                                         
                                         
                                         tab_targets.meb.append(mf_per_band)
