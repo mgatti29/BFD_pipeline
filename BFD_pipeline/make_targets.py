@@ -8,6 +8,7 @@ from .utilities import save_obj, load_obj
 import glob
 import numpy as np
 import pandas as pd
+import astropy.io.fits as fits
 from matplotlib import pyplot as plt
 import ngmix.gmix as gmix
 import ngmix           
@@ -163,8 +164,8 @@ def make_targets(output_folder,**config):
                     if len(files)>0:
                         run_count = 0
 
-                        hdulist = pf.HDUList([pf.PrimaryHDU()])
-                        mute = pf.open(files[0])
+                        hdulist = fits.HDUList([fits.PrimaryHDU()])
+                        mute = fits.open(files[0])
                         names = [mute[1].columns[i].name for i in range(len(mute[1].columns))]
                         
                         
@@ -172,7 +173,7 @@ def make_targets(output_folder,**config):
 
                         for ii in frogress.bar(range(len(files))):
                             file = files[ii]
-                            mute = pf.open(file)
+                            mute = fits.open(file)
                             for cname in mute[1].columns.names:
                                 if ii == 0:
                                     results_[cname] = mute[1].data[cname]
@@ -197,11 +198,11 @@ def make_targets(output_folder,**config):
                         
                         cols = []
                         if not ('AREA' in names):
-                            cols.append(pf.Column(name="AREA",format="K",array=0*np.ones_like(mask[mask])))
-                        cols.append(pf.Column(name="NOISETIER",format="K",array=0*np.ones_like(mask[mask])))
+                            cols.append(fits.Column(name="AREA",format="K",array=0*np.ones_like(mask[mask])))
+                        cols.append(fits.Column(name="NOISETIER",format="K",array=0*np.ones_like(mask[mask])))
                         
-                        new_cols = pf.ColDefs(cols)
-                        hdu = pf.BinTableHDU.from_columns(mute[1].columns+new_cols)
+                        new_cols = fits.ColDefs(cols)
+                        hdu = fits.BinTableHDU.from_columns(mute[1].columns+new_cols)
              
             
                         for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
@@ -281,12 +282,12 @@ def make_targets(output_folder,**config):
         # here need to load it and assign noise tiers to the fits file again ---
         for add in add_labels:
             nlost = 0
-            hdulist = pf.HDUList([pf.PrimaryHDU()])
+            hdulist = fits.HDUList([fits.PrimaryHDU()])
                     
             if os.path.exists(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add)):
                 print ('saving')
                 for xx,tt in enumerate(['targets']):
-                    m_ = pf.open(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
+                    m_ = fits.open(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
                     for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
                         hdulist[0].header[key] = m_[0].header[key]
                     hdulist[0].header['STAMPS'] = m_[0].header['STAMPS']
@@ -315,7 +316,7 @@ def make_targets(output_folder,**config):
                     new_DV_targets = np.hstack([e_,o_])
 
                     #cholesky decomposition of the best tier
-                    nt = pf.open(output_folder+'/noisetiers.fits')
+                    nt = fits.open(output_folder+'/noisetiers.fits')
                     u,o = bulkUnpack(nt[-1].data['COVARIANCE'][:,:])
                     u[-1],o[-1]
                     new_cov = np.zeros((7,7))
@@ -360,10 +361,10 @@ def make_targets(output_folder,**config):
                     # regroup classes - can't have a class with less than 10 % of the targets.
                     
                     try:
-                        cols_ = pf.Column(name="class",format="128A",array=class_u)
-                        hdu = pf.BinTableHDU.from_columns(m_[1].columns+cols_)
+                        cols_ = fits.Column(name="class",format="128A",array=class_u)
+                        hdu = fits.BinTableHDU.from_columns(m_[1].columns+cols_)
                     except:
-                        hdu = pf.BinTableHDU.from_columns(m_[1].columns)
+                        hdu = fits.BinTableHDU.from_columns(m_[1].columns)
                         hdu.data['class'] = class_u
                     hdu.data['NOISETIER'] = noise_tiers
                     
@@ -401,7 +402,7 @@ def make_targets(output_folder,**config):
                                 data[i,j] = np.mean(m_[1].data['covariance'][mask,index])
                                 data[j,i] = np.mean(m_[1].data['covariance'][mask,index])
                                 index += 1
-                        hdu = pf.ImageHDU(data)
+                        hdu = fits.ImageHDU(data)
                         hdu.header[hdrkeys['weightN']] =  m_[1].header[hdrkeys['weightN']]
                         hdu.header[hdrkeys['weightSigma']] =m_[1].header[hdrkeys['weightSigma']]
                         hdu.header['TIERNAME'] = tier
