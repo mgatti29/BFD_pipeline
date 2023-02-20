@@ -731,7 +731,7 @@ class Image:
         #
         kds_PSF = bfd.multiImage(psfs, (0,0), psfs_None, wcss_psf, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
         
-        wt = mc.KSigmaWeight(sigma = sigma) 
+        wt = mc.KBlackmanHarris(sigma = sigma) 
  
         mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = band_dict)
         mul_PSF = bfd.MultiMomentCalculator(kds_PSF, wt, bandinfo = band_dict)

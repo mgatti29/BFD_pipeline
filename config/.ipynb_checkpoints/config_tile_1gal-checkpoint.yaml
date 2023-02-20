@@ -25,7 +25,7 @@ run:
 
 
 general:
-    output_folder: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01_KBH/'
+    output_folder: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01/'
     # bfd settings ********
     n: 4.     #Default:  4.
     sigma: 0.55  # Default: 0.55
@@ -33,7 +33,7 @@ general:
     # bands ***************
     band_dict: [['r',1.0]] # for simlated tiles, please just use 1 band.
     bands: ['r'] 
-    MPI: True
+    MPI: Flase
     classes: 6 
  
 ######################################################################
@@ -71,7 +71,7 @@ make_tiles_tt:
     noiseless: False #if True, tiles won't have noise.
 
 
-    mask_data: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01_KBH/' #set it to False to not have mask effects.
+    mask_data: '/pscratch/sd/v/vwetzell/BFD/tiles_noblends_mask_effects_01/' #set it to False to not have mask effects.
     interpolate_mask: False #it corrects masked pixels with galaxy models (either from shredder or the true models)
     mfrac: 0.1 #maximum masked fraction allowed - 0.1 typical for real cases.
     background: 0. #it adds a background to the tile
@@ -129,5 +129,5 @@ cpp_part:
     bacth_size_targets: 100000000 
     option: default #options: default,noisetiers,noisetiers_chunks. In general, noisetiers_chunks recommended with multiple noisetiers and many templates.
     add_labels: ['ISp_','ISm_'] 
-    stage: ['selection_ave'] #,'selection_ave'] #,'split','integrate','assemble'] 
-    path_cpp: '/global/homes/v/vwetzell/git_repos/bfd_vwetzell/bin/'
+    stage: ['integrate','assemble'] #,'selection_ave'] #,'split','integrate','assemble'] 
+    path_cpp: '/global/homes/v/vwetzell/git_repos/bfd/bin/'

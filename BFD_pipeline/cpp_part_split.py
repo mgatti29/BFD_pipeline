@@ -126,26 +126,15 @@ def cpp_part(output_folder,**config):
                         for i_ in range(len(noise_tiers)):
                             mx = fits.open('{0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[i_]))
                             # try:
-                            #     m[i_+1] = mx[i_+1]
+                            m[i_+1] = mx[i_+1]
                             # except:
-                            m.append(mx[i_+1])
-
-
-                                
-                                
+                            # m.append(mx[i_+1])
 
                         prihdu = fits.PrimaryHDU()
                         u = fits.HDUList([fits.PrimaryHDU()])
                         for i in range(len(m)-1):
-                            u_ = fits.BinTableHDU.from_columns(m[i+1].columns)
-                            keys_ = ['TIER_NUM','EXTNAME','COVMXMX','COVMXMY','COVMYMY','SIG_XY','SIG_FLUX','STARTA00','STEPA00','INDEXA00','STARTA01','STEPA01','INDEXA01','MONO_1_0','MONO_1_1','MONO_2_0','MONO_2_1','MONO_3_0','MONO_3_1','ELLIP_1','ELLIP_2','FLUX_MIN','FLUX_MAX','WT_N','WT_SIGMA']
+                            u_ = fits.BinTableHDU.from_columns(m[i+1].columns,header=m[i+1].header)
 
-                            for k in keys_:
-                                try:
-                                    u_.header[k] = mx[i+1].header[k]
-                                except:
-                                    pass
-                                
                             u.append(u_)
                         u.writeto(output_folder+'/noisetiers.fits',overwrite = True)# 
                             
