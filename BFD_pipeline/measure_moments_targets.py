@@ -30,6 +30,12 @@ import ngmix
 import ngmix.gmix as gmix
 from ngmix.jacobian.jacobian_nb import jacobian_get_vu, jacobian_get_area
  
+def save_MOF_models(index,tab_detections_,tile,config):
+
+    if not os.path.exists(config['output_folder']+'/MOF_models/{0}_{1}'.format(tile,index)+'.npy'):
+        np.save(config['output_folder']+'/MOF_models/{0}_{1}'.format(tile,index),tab_detections_.images[index].MOF_models)
+
+            
 def measure_moments_targets(output_folder,**config):
     '''
     It computes the moments from des y6 tiles.
@@ -115,11 +121,28 @@ def pipeline(config, dictionary_runs, count):
         if 'external' not in config.keys():
             config['external'] = False
 
+        if config['exp_list']:
+            try:
+                exp_list = np.load(config['exp_list'],allow_pickle=True).item()
+            except:
+                exp_list = None
+        else:
+            exp_list = None
+            
 
+        if 'filter' not in config.keys():
+            config['filter'] = 'KBlackmanHarris'
+        
+            
         if config['setup_image_sims']:
             path = config['output_folder']+'/targets/ISp_targets_'+tile
         else:
             path = config['output_folder']+'/targets/targets_'+tile
+            
+        try:
+            config['SN_limit_tosavetemplates']
+        except:
+            config['SN_limit_tosavetemplates'] = False
             
         params_template = dict()
         params_template['n'] = config['n'] # 4 default. KSigmaWeight function index   
@@ -177,15 +200,30 @@ def pipeline(config, dictionary_runs, count):
             except:
                 pass
                 
+        # let us parallelise this -----
         p_ = config['output_folder']+'/MOF_models/{0}_{1}.npy'.format(tile,len(tab_detections.images)-1)
+        
         if not os.path.exists(p_):
-            print ('pre-saving MOF fits')
-            for ii_, index in enumerate(range(len(tab_detections.images))):
-                np.save(config['output_folder']+'/MOF_models/{0}_{1}'.format(tile,index),tab_detections.images[index].MOF_models)
-                del tab_detections.images[index].MOF_models
-                if ii_% 1000 == 0:
-                    gc.collect()
+            
 
+            pool = multiprocessing.Pool(processes=20)
+            xlist = np.arange(len(tab_detections.images))
+            _ = pool.map(partial(save_MOF_models, tab_detections_ = copy.deepcopy(tab_detections),tile=tile,config=config), xlist)
+        for ii_, index in enumerate(range(len(tab_detections.images))):
+            del tab_detections.images[index].MOF_models
+            if ii_% 1000 == 0:
+                gc.collect()
+            
+        
+        #if not os.path.exists(p_):
+        #    print ('pre-saving MOF fits')
+        #    for ii_, index in enumerate(range(len(tab_detections.images))):
+        #        if not os.path.exists(config['output_folder']+'/MOF_models/{0}_{1}'.format(tile,index)+'.npy'):
+        #            np.save(config['output_folder']+'/MOF_models/{0}_{1}'.format(tile,index),tab_detections.images[index].MOF_models)
+        #            del tab_detections.images[index].MOF_models
+        #            if ii_% 1000 == 0:
+        #                gc.collect()
+#
         print ('loading images and computing moments')
         
         # if it's an image sims run, load the MOF parameters for PSF and galaxies.
@@ -214,25 +252,25 @@ def pipeline(config, dictionary_runs, count):
                         comm = MPI.COMM_WORLD
                         if run_count+comm.rank<runs:
                 
-                            f(run_count+comm.rank, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                            f(run_count+comm.rank, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile,exp_list =exp_list)
                         run_count+=comm.size
                         comm.bcast(run_count,root = 0)
                         comm.Barrier() 
                     else:
                         if run_count<runs:
                 
-                            f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile)
+                            f(run_count, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile,exp_list =exp_list)
                         run_count+=1
             else:
                 if config['agents_chunk'] > 1:
                     
                     pool = multiprocessing.Pool(processes=config['agents_chunk'])
 
-                    _ = pool.map(partial(f, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = copy.deepcopy(dictionary_runs[tile]), bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile), xlist)
+                    _ = pool.map(partial(f, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = copy.deepcopy(dictionary_runs[tile]), bands = config['bands'], len_file = len_file, runs = runs,params_image_sims = params_image_sims,external=external,tile=tile,exp_list =exp_list), xlist)
                     
                 else:
                     for x in xlist:
-                        f(x, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs, params_image_sims = params_image_sims,external=external,tile=tile)
+                        f(x, config = config, params_template = params_template,chunk_size=chunk_size, path = path+config['output_label'], tab_detections =  copy.deepcopy(tab_detections), m_array = dictionary_runs[tile], bands = config['bands'], len_file = len_file, runs = runs, params_image_sims = params_image_sims,external=external,tile=tile,exp_list =exp_list)
 
 
         # clean MOF and assemble
@@ -252,12 +290,12 @@ def pipeline(config, dictionary_runs, count):
                 comm = MPI.COMM_WORLD
                 run_count = 0
                 if comm.rank == 0:
-                    collapse(path+config['output_label'])
+                    collapse(path,config['output_label'])
 
                 comm.bcast(run_count,root = 0)
                 comm.Barrier() 
             else:
-                collapse(path+config['output_label'])
+                collapse(path,config['output_label'])
 
 
 
@@ -271,8 +309,14 @@ def pipeline(config, dictionary_runs, count):
 
 
 
-def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, bands, len_file, runs, params_image_sims,external,tile):
+def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, bands, len_file, runs, params_image_sims,external,tile,exp_list):
             
+            # initialise to save high Sn targets as templates
+
+            tab_detections_templates = dict()
+            
+
+        
             # inititalise target table ---------
             tab_targets = TargetTable(n = params_template['n'],
                                   sigma = params_template['sigma'])
@@ -387,6 +431,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                 image_storage = dict()
                 image_storage_ = dict()
                         
+                exp_list_check = True
                 for index_t in frogress.bar(range(chunk_range[0],chunk_range[1])):
                 
                     if len(tab_detections.images) != len_file:
@@ -401,7 +446,28 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             index = copy.copy(index_t)
                         #try:
                         if 1==1:
-                            tab_detections.images[index].Load_MEDS(index, meds = m_array)
+                            if (exp_list is not None) and exp_list_check:
+                                # shrink the exp_list ******
+                                for i_,bb in enumerate(range(len(tab_detections.images[index].bands))):
+                                    if i_ == 0:
+                                        exp = np.array([np.int((xx).split('_')[0].strip('red/D00')) for xx in m_array[bb]._image_info['image_path'][1:]] )
+                                    else:
+                                        exp1 = np.array([np.int((xx).split('_')[0].strip('red/D00')) for xx in m_array[bb]._image_info['image_path'][1:]] )
+                                        exp = np.hstack([exp,exp1])
+                                
+                                for k_ in exp_list.keys():
+                                    mu = np.in1d(exp_list[k_]['exp'],exp)
+                                    try:
+                                        exp_list[k_]['exp'] = 100*exp_list[k_]['exp'][mu]+ exp_list[k_]['ccd'][mu]
+                                    
+                                    #    exp_list[k]['ccd'] = exp_list[k]['ccd'][mu]
+                                    except:
+                                         exp_list[k_]['exp'] = exp_list[k_]['exp'][mu]
+                                    #    pass
+                                    #exp_list_check = False
+                            
+                          
+                            tab_detections.images[index].Load_MEDS(index, meds = m_array,exp_list = exp_list)
                         #except:
 
                         #    print (index,len(tab_detections.images),'   ')
@@ -413,10 +479,12 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                         bands_not_masked = tab_detections.images[index].check_mfrac(limit=config['frac_limit'], use_COADD_only = config['COADD_only'])
 
 
+                  
 
                         #subtract background
                         bckg_flag = 0
-                        
+                        bkg = 0.
+                        len_v = 10000000000
                         if config['subtract_background']:
                             bkg,len_v = tab_detections.images[index].subtract_background()
                         #computes noise based on mask and weightmap, and then discard them.
@@ -454,8 +522,9 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             if config['MOF_subtraction']:
                                 tab_detections.render_MOF_models(index = index, render_self = False, render_others = True,use_COADD_only = config['COADD_only'])
                                 
-                                
+                            
                             if config['interp_masking']:
+                               
                                 #Interpolates ther images over masked pixels
                                 tab_detections.images[index].deal_with_bmask(use_COADD_only = config['COADD_only'])
 
@@ -472,7 +541,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         image_storage[index][index_band][exp] = [tab_detections.images[index].imlist[index_band][exp],tab_detections.images[index].MOF_model_rendered[index_band][exp],tab_detections.images[index].seglist[index_band][exp]]
 
 
-                            tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = config['COADD_only'], flags = 0, MOF_subtraction = config['MOF_subtraction'], band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'])
+                            tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = config['COADD_only'], flags = 0, MOF_subtraction = config['MOF_subtraction'], band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'], filter_ = config['filter'])
                             del tab_detections.images[index].MOF_model_rendered
                             del tab_detections.images[index].imlist
                             gc.collect()
@@ -484,6 +553,20 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                             
                             #*************
                             covm_even,covm_odd,covm_even_all,covm_odd_all = tab_detections.images[index].moments.get_covariance(returnbands=True)
+                            
+                            SN = mom.even[0]/np.sqrt(covm_even[0,0])
+                          
+                            if config['SN_limit_tosavetemplates']:
+                                if SN>config['SN_limit_tosavetemplates']:
+                                    # select only 1/1000 of the objects.
+                                    if np.random.randint(0,500,1)[0] == 1:
+                                        tab_detections_templates[index] = dict()
+                                        tab_detections_templates[index]['moments'] = tab_detections.images[index].moments
+                                        tab_detections_templates[index]['SN'] = SN
+                                        tab_detections_templates[index]['index'] = tab_detections.images[index].image_ID[0]
+                                        tab_detections_templates[index]['ra'] = tab_detections.images[index].image_ra[0]
+                                        tab_detections_templates[index]['dec'] = tab_detections.images[index].image_dec[0]
+
                             covgal = covm_even,covm_odd
                             covgal_per_band = covm_even_all,covm_odd_all 
 
@@ -596,7 +679,7 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                                         mute_range = [index,index+1]
 
 
-                                        tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = config['COADD_only'], flags = 0, MOF_subtraction = False, band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'])
+                                        tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = config['COADD_only'], flags = 0, MOF_subtraction = False, band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'], filter_ = config['filter'])
 
                                         tab_targets.add(mom, xy=newcent,id=tab_detections.images[index].image_ID[0],covgal=MomentCovariance(covgal[0],covgal[1]))
                                         #tab_targets.p0.append(p0)
@@ -635,9 +718,9 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
 
                                         # let's initialise it as [12 x numb_bands] --
 
-                                        orig_row_ = np.zeros(40)
-                                        orig_col_ = np.zeros(40)
-                                        ccd_name_ =  -np.ones(40)
+                                        orig_row_ = np.zeros(50)
+                                        orig_col_ = np.zeros(50)
+                                        ccd_name_ =  -np.ones(50)
 
 
 
@@ -751,6 +834,11 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
                 print ('\n----\n')
     
                 save_moments_targets(tab_targets,path+'_chunk_{0}.fits'.format(iii),config)
+        
+                if config['SN_limit_tosavetemplates']:
+                    save_obj(path.split('targets/')[0]+'/targets/high_SN_templates_chunk_{0}_{1}'.format(iii,config['output_label']),tab_detections_templates)
+                    del tab_detections_templates
+                    gc.collect()
                 if config['debug']:
                     save_obj(path+'_image_storage_chunk_{0}.fits'.format(iii),image_storage)
                 
