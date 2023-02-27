@@ -17,6 +17,7 @@ import copy
 from scipy.interpolate import CloughTocher2DInterpolator
 import coord
 import galsim
+import astropy.io.fits as fits
 import frogress
 import shredder
 import esutil as eu
@@ -250,7 +251,7 @@ class Image:
                     
                     
                     
-    def Load_MEDS(self, index, meds = []):
+    def Load_MEDS(self, index, meds = [],exp_list = None):
         '''
         Loads into memory a MEDS detection - 
         it saves the images/segmap/weightmap/bmask/jacobian and psf for different exposures.
@@ -282,6 +283,20 @@ class Image:
             
             #get ccd numbers ----
             self.ccd_name =  [[ 1000*b+np.int((meds[b]._image_info['image_path'][meds[b]['file_id'][index][i]]).split('_')[2].strip('c')) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
+            
+            self.expnum =  [[ np.int((meds[b]._image_info['image_path'][meds[b]['file_id'][index][i]]).split('_')[0].strip('red/D00')) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
+          
+
+
+            if exp_list is not None:
+                self.expnum_ccd =  [[ (self.ccd_name[b][i-1]-1000*b)+100*self.expnum[b][i-1]  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
+
+                #shrink explist        
+                self.explist =  [[ ~((self.expnum_ccd[b][i-1] in exp_list[self.bands[b]]['exp']) & (self.expnum[b][i-1] in exp_list['all']['exp']))  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]
+            else:
+                self.explist = None
+                
+            
 
             # save DESDM coordinates ----
             self.DESDM_coadd_x = [m['input_row'][index] for m in meds]
@@ -401,12 +416,12 @@ class Image:
                 bmask |= np.rot90(self.masklist[b][i])
     
                 try:
-                    self.imlist[b][i][bmask!=0] += self.images[ii].MOF_model_all_rendered[b][i][bmask!=0]
+                    self.imlist[b][i][bmask==0] += self.images[ii].MOF_model_all_rendered[b][i][bmask==0]
                 except:
                     pass
                 s0 = self.MOF_model_all_rendered[b][i].shape[0]
                 
-                self.imlist[b][i][(bmask!=0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))/np.sqrt(self.wtlist[b][i]))[(bmask!=0) & (self.wtlist[b][i]!=0.)]
+                self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]!=0.)])
                                                                 
                     
                 #self.imlist[b][i],_ = copy.copy(check_mask_and_interpolate(self.imlist[b][i],self.masklist[b][i]))
@@ -659,7 +674,7 @@ class Image:
 
 
     def compute_moments_multiband(self, sigma = 3, use_COADD_only = False, bands = ['r', 'i', 'z'], 
-                                  band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, MOF_subtraction = False,pad_factor=1.):
+                                  band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, MOF_subtraction = False,pad_factor=1.,filter_='KBlackmanHarris'):
         '''
         Compute moments combining exposures and bands
         '''
@@ -686,7 +701,17 @@ class Image:
                     start = 1
                     end = self.ncutout[index_band]
                 for exp in range(start, end):  
+                    compute = False
                     if self.mfrac_flag[index_band][exp]:
+                        
+                        if self.explist is not None:
+                            if self.explist[index_band][exp-1]:
+                                compute = True
+                        else:
+                            compute = True
+                    if compute:
+                                
+                        
                         N = self.imlist[index_band][exp].shape[0]
                         if MOF_subtraction:
                             img = self.imlist[index_band][exp] - self.MOF_model_rendered[index_band][exp]
@@ -731,8 +756,12 @@ class Image:
         #
         kds_PSF = bfd.multiImage(psfs, (0,0), psfs_None, wcss_psf, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
         
-        wt = mc.KBlackmanHarris(sigma = sigma) 
- 
+        #wt = mc.KSigmaWeight(sigma = sigma) 
+        if filter_ == 'KBlackmanHarris':
+            wt = mc.KBlackmanHarris(sigma = sigma) 
+        else:
+            wt = mc.KSigmaWeight(sigma = sigma) 
+            
         mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = band_dict)
         mul_PSF = bfd.MultiMomentCalculator(kds_PSF, wt, bandinfo = band_dict)
         
@@ -870,6 +899,7 @@ class Image:
         self.psf_params_average['g2'] /= wt
         self.psf_params_average['T']  /= wt
 
+import pyfits as pf
 class MOF_table:
     def __init__(self, path, shredder = False):
         '''
@@ -1413,7 +1443,7 @@ class DetectionsTable:
                     pass
         return M      
         
-    def compute_moments(self, sigma, bands = 'All', use_COADD_only = True, flags = 'All', MOF_subtraction = True, band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, chunk_range = None,pad_factor = 1.):
+    def compute_moments(self, sigma, bands = 'All', use_COADD_only = True, flags = 'All', MOF_subtraction = True, band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, chunk_range = None,pad_factor = 1., filter_ = 'KBlackmanHarris'):
         self.params['sigma'] = sigma
         
         if chunk_range == None:
@@ -1445,7 +1475,7 @@ class DetectionsTable:
                     band_dict_to_use['index'] = list(np.arange(len(band_dict_to_use['weights'] )))
   
        
-                    self.images[i].compute_moments_multiband(sigma = sigma, bands = bands_to_use, use_COADD_only = use_COADD_only, MOF_subtraction = MOF_subtraction, band_dict = band_dict_to_use,pad_factor = pad_factor)
+                    self.images[i].compute_moments_multiband(sigma = sigma, bands = bands_to_use, use_COADD_only = use_COADD_only, MOF_subtraction = MOF_subtraction, band_dict = band_dict_to_use,pad_factor = pad_factor, filter_ = filter_)
                 
                 
                 #except:
