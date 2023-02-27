@@ -358,11 +358,11 @@ def make_templates(output_folder,**config):
             
         
         if not sims:
-            #targets = fits.open(output_folder+'/targets_sample_g.fits')
+            #targets = pf.open(output_folder+'/targets_sample_g.fits')
             deep_files = glob.glob(output_folder+'/templates/'+'/t*.pkl')
 
         else:
-            #targets = fits.open(output_folder+'/ISp_targets_sample_g.fits')
+            #targets = pf.open(output_folder+'/ISp_targets_sample_g.fits')
             deep_files = glob.glob(output_folder+'/templates/'+'/IS*.pkl')
 
         # number of entries:
