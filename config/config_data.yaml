@@ -12,14 +12,14 @@ run:
 ######################################################################
 
 
+#https://www.cosmo.bnl.gov/Private/gpfs/workarea/beckermr/des-y6-analysis/2023_01_19_extract_psf_to_cells/uccds_g.txt
 general:
-    #output_folder:  '/pscratch/sd/m/mgatti/BFD/_test_80_SN/'  #'/global/cscratch1/sd/mgatti/BFD//_test_ref_bck/'
-    output_folder:  '/pscratch/sd/v/vwetzell/BFD/tile_DES0137-3749_KBH_090/'  #'/global/cscratch1/sd/mgatti/BFD//_test_ref_bck/'
+    output_folder:  '/global/cscratch1/sd/mgatti/BFD//_test_new_mask005_V/'
     n: 4.     # Default: 
-    sigma: 0.9*0.55  
+    sigma: 0.65  # Default: 0.5
     band_dict: [['g',0.],['r',0.7],['i',0.2],['z',0.1]] #[['r',1.0]] #
     bands: ['g','r', 'i', 'z'] #['r'] #
-    MPI: True
+    MPI: False
     pad_factor: 4.
   
         
@@ -29,17 +29,18 @@ general:
 
 measure_moments_targets:
 
-    path_data: '/pscratch/sd/v/vwetzell/BFD/data/'
+    path_data: '/global/cscratch1/sd/mgatti/BFD//data_y6'
     output_label: ''
     tiles: ['DES0137-3749'] 
-    agents_chunk: 1  # works if MPI_per_tile is False. Spawns X multiprocess
+    agents_chunk: 20  # works if MPI_per_tile is False. Spawns X multiprocess
     chunk_size: 1500 
     max_target_per_tile: 100000 
     MOF_subtraction: True
     shredder: True
-    path_shredder: '/pscratch/sd/v/vwetzell/BFD/data/shredex/'
+    filter:  'KBlackmanHarris' #'normal'
+    path_shredder: '/global/cscratch1/sd/mgatti/BFD//data_y6/shredex/'
     cut_psf : [False,25]
-    MPI_per_tile : True # speed up for testing on 1 TILE
+    MPI_per_tile : False # speed up for testing on 1 TILE
     minimum_number_of_bands : ['r', 'i', 'z']
     interp_masking : True
     subtract_background : True
@@ -49,6 +50,8 @@ measure_moments_targets:
     run_mcal: False
     debug: False
     setup_image_sims: False  
+    SN_limit_tosavetemplates: 80
+    exp_list: '/global/homes/m/mgatti/BFD_pipeline/data/PSF_cuts.npy'
     
     
 ######################################################################
