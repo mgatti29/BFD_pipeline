@@ -33,7 +33,9 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
     m_array = [meds.MEDS(dic[tile][band]['meds'][0]) for band in bands]
     psf_array = [psfex.PSFEx(dic[tile][band]['psf'][0])for band in bands]
     tab_detections_out = copy.deepcopy(tab_detections)
+    fluxes_out = dict()
     path = output_folder+'/templates/'+'/templates_'+tile+'_chunk_'+str(iii)
+    path_m = output_folder+'/templates/'+'/Mf_templates_'+tile+'_chunk_'+str(iii)
     path_A = output_folder+'/templates/'+'/Atemplates_'+tile+'_chunk_'+str(iii)
     path_i = output_folder+'/templates/'+'/image_storage_templates_'+tile+'_chunk_'+str(iii)
     image_storage = dict()
@@ -113,7 +115,8 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
                 mute_range = [index,index+1]
 
                 try:
-                    tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = True, flags = 0, MOF_subtraction = config['MOF_subtraction'], band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'])
+                #if 1==1:
+                    tab_detections.compute_moments(params_template['sigma'], bands = params_template['bands'], use_COADD_only = True, flags = 0, MOF_subtraction = config['MOF_subtraction'], band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'],filter_ = config['filter'])
                     mom, meb = tab_detections.images[index].moments.get_moment(0.,0.,returnbands=True)
                     
             
@@ -122,16 +125,43 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
                         for index_band in range(len(bands)):
                             image_storage[index][index_band] = [tab_detections.images[index].imlist[index_band],tab_detections.images[index].MOF_model_rendered[index_band],tab_detections.images[index].seglist[index_band],proceed,bands_not_masked,config['minimum_number_of_bands']]
                          
+                        
                     # mf per band +++++++++++++++=
-                    mf_per_band = np.array([-999]*len(config['bands']))
+                    mf_per_band = -999*np.ones(len(config['bands']))
                     index_band =[]
                     for b_ in bands_not_masked:
                         index_band.append(np.arange(len(config['bands']))[np.array(np.in1d(config['bands'],b_))])
                     index_band = np.array(index_band)
+                    index_band = index_band[:,0]
+                    meb_ = np.array([m_.even for m_ in meb])
+
                     mf_per_band[index_band] = meb_[:,0]
-                    tab_detections.images[index].mf_per_band = mf_per_band
+                    
+                    
+                    tab_detections.compute_moments(params_template['sigma'], bands = config['minimum_number_of_bands'], use_COADD_only = True, flags = 0, MOF_subtraction = config['MOF_subtraction'], band_dict = params_template['band_dict'], chunk_range = mute_range,pad_factor=config['pad_factor'], filter_ = config['filter'])
+                    mom, meb = tab_detections.images[index].moments.get_moment(0.,0.,returnbands=True)
+                    
+                    
+                   # print (mf_per_band)
+                    #tab_detections.images[index].mf_per_band = mf_per_band
                     tab_detections_out.images[index] = copy.deepcopy(tab_detections.images[index])
-                                        
+                    fluxes_out[index] = dict()
+                    fluxes_out[index]['mf_per_band'] = mf_per_band
+                    fluxes_out[index]['index'] =       copy.deepcopy(tab_detections.images[index].image_ID[0])
+                    fluxes_out[index]['MOF_index'] =   copy.deepcopy(tab_detections.images[index].MOF_index)
+                    fluxes_out[index]['MAG_I'] =       copy.deepcopy(tab_detections.images[index].MAG_I)
+                    fluxes_out[index]['TILENAME'] =    copy.deepcopy(tab_detections.images[index].TILENAME)
+                    
+                    
+                   # tab_detections.images[index].mf_per_band = None
+                    tab_detections.images[index].MOF_index  = None
+                    tab_detections.images[index].MAG_I  = None
+                    tab_detections.images[index].TILENAME = None
+                    
+                   # tab_detections_out.images[index].mf_per_band = None
+                    tab_detections_out.images[index].MOF_index  = None
+                    tab_detections_out.images[index].MAG_I  = None
+                    tab_detections_out.images[index].TILENAME = None
                 except:
                     pass
                     
@@ -148,6 +178,12 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
                     tab_detections_out.images[index].jaclist = None
                     tab_detections_out.images[index].psf = None
                     tab_detections_out.images[index].MOF_model_rendered = None
+                    tab_detections_out.images[index].DESDM_coadd_x = None
+                    tab_detections_out.images[index].DESDM_coadd_y = None
+                    tab_detections_out.images[index].ccd_name = None
+                    
+    
+            
                     try:
                         tab_detections_out.images[index].moments = None
                     except:
@@ -169,7 +205,11 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
                         tab_detections_out.images[index].moments = None
                     except:
                         pass
+                    tab_detections_out.images[index].DESDM_coadd_x = None
+                    tab_detections_out.images[index].DESDM_coadd_y = None
+                    tab_detections_out.images[index].ccd_name = None
                     
+    
         for index in frogress.bar(range(len(tab_detections_out.images))):
             try:
                 del tab_detections_out.images[index].MOF_models    
@@ -183,6 +223,9 @@ def f(iii, config, params_template, chunk_size, tab_detections, dic, bands, len_
         save_obj(path_A,[EFFAREA,1,True])
         
         save_obj(path,tab_detections_out)
+        save_obj(path_m,fluxes_out)
+        
+        
         if config['debug']:
             save_obj(path_i,image_storage)
             
@@ -313,12 +356,14 @@ def pipeline(config, output_folder,params_template, bands, dictionary_runs, coun
             files = glob.glob(output_folder+'/templates/'+'/templates_'+tile+'*')
 
             save__ = dict()
+            #save__m = dict()
             count = 0
     
 
             for file in files:
 
                 tub = load_obj(file.split('.pkl')[0])
+            
                 for index in range(len(tub.images)):  
                 
 
@@ -329,22 +374,22 @@ def pipeline(config, output_folder,params_template, bands, dictionary_runs, coun
                         if (mom.even ==  mom.even)[0]:
                             cc = True
                     except:
-                    #    print ('not a valid measurement')
+                        #print ('not a valid measurement')
                         pass
                     if cc:
 
                         count +=1
                         save__[index] = dict()
                         save__[index]['moments'] = tub.images[index].moments
-                        save__[index]['mf_per_band'] = tub.images[index].mf_per_band
-                        save__[index]['index_gal'] = tub.images[index].image_ID[0]
+                        #save__m[index]['mf_per_band'] = tub.images[index].mf_per_band
+                        #save__m[index]['index'] = tub.images[index].image_ID[0]
                         save__[index]['index'] = tub.images[index].image_ID[0]
-                        try:
-                            save__[index]['MOF_index'] = tub.images[index].MOF_index
-                            save__[index]['MAG_I'] = tub.images[index].MAG_I
-                            save__[index]['tilename'] = tub.images[index].TILENAME                
-                        except:
-                            pass
+                        #try:
+                        #    save__m[index]['MOF_index'] = tub.images[index].MOF_index
+                        #    save__m[index]['MAG_I'] = tub.images[index].MAG_I
+                        #    save__m[index]['tilename'] = tub.images[index].TILENAME                
+                        #except:
+                        #    pass
                         try:
                             save__[index]['ra'] = tub.images[index].image_ra[0]
                             save__[index]['dec'] = tub.images[index].image_dec[0]
@@ -354,7 +399,50 @@ def pipeline(config, output_folder,params_template, bands, dictionary_runs, coun
                 gc.collect()
                 os.remove(file)
             #print (output_folder+'/templates/'+'/templates_'+tile)
+        
             save_obj(output_folder+'/templates/'+'/templates_'+tile,save__)
+            
+            
+            
+        
+            # clean up and merge ----
+            files = glob.glob(output_folder+'/templates/'+'/Mf_templates_'+tile+'*')
+
+            save__ = dict()
+            #save__m = dict()
+            count = 0
+    
+
+            for file in files:
+
+                tub = load_obj(file.split('.pkl')[0])
+            
+                for index in tub.keys():
+                
+
+                    try:
+ 
+                        count +=1
+                        save__[index] = dict()
+                        #save__[index]['moments'] = tub.images[index].moments
+                        save__[index]['mf_per_band'] = tub[index]['mf_per_band']
+                        #save__m[index]['index'] = tub.images[index].image_ID[0]
+                        save__[index]['index'] = tub[index]['index']
+                        save__[index]['MOF_index'] = tub[index]['MOF_index']
+                        save__[index]['MAG_I'] = tub[index]['MAG_I']
+                        save__[index]['TILENAME'] = tub[index]['TILENAME']
+                    except:
+                        pass
+              
+                del tub
+                gc.collect()
+                os.remove(file)
+            #print (output_folder+'/templates/'+'/templates_'+tile)
+        
+            save_obj(output_folder+'/templates/'+'/Mf_templates_'+tile,save__)
+            
+            
+            #save_obj(output_folder+'/templates/'+'/Mf_templates_'+tile,save__m)
             del save__
             gc.collect()
 
@@ -380,7 +468,9 @@ def measure_moments_templates(output_folder,**config):
     '''
     
     
-    
+    if 'filter' not in config.keys():
+        config['filter'] = 'KBlackmanHarris'
+
     # Read the config file
     print ('Executing the measure_moments_templates stage')
     config['output_folder'] = output_folder
