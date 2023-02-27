@@ -243,7 +243,7 @@ def make_targets(output_folder,**config):
                             hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
                         except:
                             try:
-                                hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add),overwrite = True)# 
+                                hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add),clobber = True)# 
                             except:
                                 pass
     
@@ -447,7 +447,7 @@ def make_targets(output_folder,**config):
                         hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
                     except:
                         try:
-                            hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add),overwrite = True)# 
+                            hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add),clobber = True)# 
                         except:
                             pass
           
