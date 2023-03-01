@@ -793,7 +793,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         
                         # the outer 40 pixels are never used to inject galaxies, so if there's a detection there it shoud be dropped. 
                         if config['mode_detection'] == 'detection':
-                            obj_within_good_area = (detection_cat[config['bands'][0]][im_type]['x'][ix]>=35) & (detection_cat[config['bands'][0]][im_type]['x'][ix]<= (config['size_tile']-35)) &  (detection_cat[config['bands'][0]][im_type]['y'][ix]>=35) & (detection_cat[config['bands'][0]][im_type]['y'][ix]<= (config['size_tile']-35))
+                            obj_within_good_area = (detection_cat[config['bands'][0]][im_type]['x'][ix]>=30) & (detection_cat[config['bands'][0]][im_type]['x'][ix]<= (config['size_tile']-30)) &  (detection_cat[config['bands'][0]][im_type]['y'][ix]>=30) & (detection_cat[config['bands'][0]][im_type]['y'][ix]<= (config['size_tile']-30))
                         else:
                             obj_within_good_area = True
                             
@@ -1049,7 +1049,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                 noise_a.append(tile[band]['noise_level'])
 
                             kds = bfd.multiImage(images_a, (0,0), psf_a, wcs_a, pixel_noiselist = noise_a, bandlist = bands_a ,pad_factor= config['pad_factor'])
-                            wt = mc.KBlackmanHarris(sigma = config['sigma']) 
+                            wt = mc.KSigmaWeight(sigma = config['sigma']) 
                             mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = config['band_dict_code'])
                             xyshift, error,msg = mul.recenter()
                             moments = mul
@@ -1284,7 +1284,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         noise_a.append(tile[band]['noise_level'])
 
                     kds = bfd.multiImage(images_a, (0,0), psf_a, wcs_a, pixel_noiselist = noise_a, bandlist = bands_a ,pad_factor= config['pad_factor'])
-                    wt = mc.KBlackmanHarris(sigma = config['sigma']) 
+                    wt = mc.KSigmaWeight(sigma = config['sigma']) 
                     mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = config['band_dict_code'])
                     
                     #xyshift, error,msg = mul.recenter()
