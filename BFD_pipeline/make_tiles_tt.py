@@ -68,7 +68,10 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             debug_images['mask'] = []
             debug_images['seg']= []
         
-        
+        try:
+            config['filter']
+        except:
+            config['filter'] = 'KBlackmanHarris'       
         try:
             
             config['perfect_deblender']
@@ -1049,7 +1052,10 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                 noise_a.append(tile[band]['noise_level'])
 
                             kds = bfd.multiImage(images_a, (0,0), psf_a, wcs_a, pixel_noiselist = noise_a, bandlist = bands_a ,pad_factor= config['pad_factor'])
-                            wt = mc.KSigmaWeight(sigma = config['sigma']) 
+                            if config['filter'] =='KBlackmanHarris':
+                                 wt = mc.KBlackmanHarris(sigma = config['sigma']) 
+                            else:                                
+                                 wt = mc.KSigmaWeight(sigma = config['sigma']) 
                             mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = config['band_dict_code'])
                             xyshift, error,msg = mul.recenter()
                             moments = mul
@@ -1284,7 +1290,11 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         noise_a.append(tile[band]['noise_level'])
 
                     kds = bfd.multiImage(images_a, (0,0), psf_a, wcs_a, pixel_noiselist = noise_a, bandlist = bands_a ,pad_factor= config['pad_factor'])
-                    wt = mc.KSigmaWeight(sigma = config['sigma']) 
+                    if config['filter'] =='KBlackmanHarris':
+                         wt = mc.KBlackmanHarris(sigma = config['sigma']) 
+                    else:                                
+                         wt = mc.KSigmaWeight(sigma = config['sigma']) 
+                        
                     mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = config['band_dict_code'])
                     
                     #xyshift, error,msg = mul.recenter()
