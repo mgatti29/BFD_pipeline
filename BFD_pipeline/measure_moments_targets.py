@@ -625,9 +625,9 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
 
                             # let's initialise it as [12 x numb_bands] --
                             
-                            orig_row_ = np.zeros(50)
-                            orig_col_ = np.zeros(50)
-                            ccd_name_ = -np.ones(50)
+                            orig_row_ = np.zeros(56)
+                            orig_col_ = np.zeros(56)
+                            ccd_name_ = -np.ones(56)
                             
                             
                             u_1 = np.array([ll[0] for l in tab_detections.images[index].orig_rowcol for ll in l[1:]])
@@ -718,9 +718,9 @@ def f(iii, config, params_template, chunk_size, path, tab_detections, m_array, b
 
                                         # let's initialise it as [12 x numb_bands] --
 
-                                        orig_row_ = np.zeros(50)
-                                        orig_col_ = np.zeros(50)
-                                        ccd_name_ =  -np.ones(50)
+                                        orig_row_ = np.zeros(56)
+                                        orig_col_ = np.zeros(56)
+                                        ccd_name_ =  -np.ones(56)
 
 
 
