@@ -391,7 +391,7 @@ class Image:
                         self.imlist[b][i] -= correction
                         bkg_tot += correction
                         count += 1
-                        len_v = len(v)               
+                        len_v += len(v)               
                         
         if count ==0:
             return bkg_tot,100000000000000
