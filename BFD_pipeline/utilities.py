@@ -97,6 +97,10 @@ def save_moments_targets(self,fitsname,config):
         col.append(fits.Column(name="bkg",format="D",array=self.bkg))
         #except:
         #    pass
+        try:
+            col.append(fits.Column(name="lenv",format="L",array=(self.len_v).astype(np.int)))
+        except:
+            pass
         if len(self.num_exp) == len(self.id):
             col.append(fits.Column(name="num_exp",format="K",array=self.num_exp))
         col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
