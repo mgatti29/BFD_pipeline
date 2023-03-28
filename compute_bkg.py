@@ -15,7 +15,7 @@ def doit(config,index, meds = [],exp_list = False):
     imlist = [m.get_cutout_list(index) for m in meds]
 
 
-    id_ = m_array[0]['id'][index]
+    id_ = meds[0]['id'][index]
 
     bands = len(meds)
     bkg_tot = 0
@@ -107,15 +107,24 @@ def compute_bck(tile,config):
     
     
     
+import argparse
     
 if __name__ == '__main__':
     
+
+
+    parser = argparse.ArgumentParser(description='Optional app description')
+    parser.add_argument('--tiles', nargs='+', type=str, help='required config file')
+
+
+    args = parser.parse_args()
+
 
     config = dict() 
     config['path_data'] = '/global/cscratch1/sd/mgatti/BFD//data_y6/'
     config['bands']  = ['g','r','i','z']
     config['w']  = [0.,0.7,0.2,0.1]
-    tiles =  ['DES0137-3749'] # here you need the names of all the tiles
+    tiles =  [args.tiles] # here you need the names of all the tiles
     output = '/global/cscratch1/sd/mgatti/BFD/output_bck/'
 
     
