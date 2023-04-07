@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 import meds
 import copy
 import glob
@@ -79,7 +81,7 @@ def compute_bck(tile,config):
             dictionary_runs[tile][band]['meds'] = np.array(f_)[np.array([((band+'_meds') in ff) for ff in f_])][0]
 
     for tile in dictionary_runs.keys():
-        path_ = output+'background_'+tile+'.fits'
+        path_ = output+'background_'+tile+config['output_label']+'.fits'
         if not os.path.exists(path_):
             m_array = [meds.MEDS(dictionary_runs[tile][band]['meds']) for band in config['bands']]
 
@@ -114,19 +116,21 @@ if __name__ == '__main__':
 
 
     parser = argparse.ArgumentParser(description='Optional app description')
-    parser.add_argument('--tiles', nargs='+', type=str, help='required config file')
-
+    parser.add_argument('--tiles', nargs='+', type=str, help='required tile')
+    parser.add_argument('--output_label', type=str, help='required output label')
 
     args = parser.parse_args()
 
-
     config = dict() 
-    config['path_data'] = '/global/cscratch1/sd/mgatti/BFD//data_y6/'
+    config['path_data'] = 'meds'
     config['bands']  = ['g','r','i','z']
     config['w']  = [0.,0.7,0.2,0.1]
-    tiles =  [args.tiles] # here you need the names of all the tiles
-    output = '/global/cscratch1/sd/mgatti/BFD/output_bck/'
-
+    tiles=[]
+    for tile in args.tiles:
+        tiles.append(tile)
+    if args.output_label is not None:
+        config['output_label'] = args.output_label
+    output = 'output_bck/'
     
     
                
