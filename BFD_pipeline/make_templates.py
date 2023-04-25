@@ -37,6 +37,163 @@ from bfd import Moment
 import gc
 import pandas as pd
 
+import multiprocessing
+from functools import partial   
+
+
+
+def dd_(ii,deep_files):
+
+
+    ra = []
+    dec = []
+    ra_DF = []
+    dec_DF = []
+    MAG_I = []
+    tilename = []
+    p0_ = []
+    p0_PSF_ = []
+    
+            
+    moments = [np.zeros(5)]
+    moments_odd = [np.zeros(2)]
+    error = [np.zeros(5)]
+    #error_odd = []
+    indexu = [0]
+    indexu_gal = [0]
+
+    mf_per_band = []
+        
+    
+    
+    df = deep_files[ii]
+    try:
+        save_ = load_obj(df.strip('.pkl'))
+        for index in (save_.keys()):
+
+            mom = save_[index]['moments'].get_moment(0.,0.)
+
+            moments.append(mom.even)
+            moments_odd.append(mom.odd)
+            error.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
+            #error_odd.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
+            indexu.append(save_[index]['index'] )
+            try:
+                indexu_gal.append(save_[index]['index_gal'] )
+            except:
+                indexu_gal.append(save_[index]['index'] )
+            try:
+                mf_per_band.append(save_[index]['mf_per_band'] )
+            except:
+                pass
+            try:
+                mof_index.append(save_[index]['MOF_index'] )
+                ra.append(save_[index]['ra'])
+                dec.append(save_[index]['dec'])
+                ra_DF.append(save_[index]['ra'])
+                dec_DF.append(save_[index]['dec'])
+                MAG_I.append(save_[index]['MAG_I'])
+                tilename.append(save_[index]['tilename'])
+            except:
+                pass
+            try:
+                p0_.append(save_[index]['p0'])
+                p0_PSF_.append(save_[index]['p0_PSF'])
+            except:
+                pass
+    except:
+        pass
+    return [ra,dec,ra_DF,dec_DF,MAG_I,tilename,p0_,p0_PSF_,np.array(moments),np.array(moments_odd),np.array(error),np.array(indexu),np.array(indexu_gal)]
+
+        
+    
+    
+def select_obj_w_special(new_DV,w,info,radius):
+    
+    info = copy.deepcopy(info)
+    print ('select_obj_w_special')
+    
+  
+    mask = np.array([True]*new_DV.shape[0])
+    ipx_ref = np.arange(new_DV.shape[0])
+    
+
+    r = len(mask[mask])
+    redoit = True
+    iter_ = 0
+    # this removes objects too close ++++++++++++
+    while redoit:
+        print (iter_)
+        iter_ += 1
+        mask_w_dummy = copy.deepcopy(mask)
+        
+        YourTreeName = scipy.spatial.cKDTree(new_DV[mask_w_dummy], leafsize=15)
+        
+        d,ipx__ = YourTreeName.query(new_DV[mask_w_dummy], k=2, distance_upper_bound=radius)
+
+        ipx_ = []
+        for dd in ipx__:
+            ipx_.append(np.sort(dd))
+        ipx_ = np.array(ipx_)
+        
+        
+        a = np.zeros((ipx_ref.shape[0]))
+
+        u_ = (ipx_[ipx_[:,1]<len(mask[mask_w_dummy])])
+        
+        ipx_ref_ = ipx_ref[mask_w_dummy]
+        for ii in frogress.bar(range(len(u_))):
+            ipx = u_[ii]
+            if (a[ipx_ref_[ipx[0]]] ==0) and (a[ipx_ref_[ipx[1]]] == 0): 
+                if (w[ipx[1]]+w[ipx[0]])!=0:
+                    mask[ipx_ref_[ipx[1]]] = False
+                    # remove obj list
+                    info[ipx[0],:] = (w[ipx[1]]*info[ipx[1],:] + w[ipx[0]]*info[ipx[0],:])/(w[ipx[1]]+w[ipx[0]])
+
+                    w[ipx[0]] += w[ipx[1]]
+
+
+                    w[ipx[1]] = 0
+                    a[ipx_ref_[ipx[0]]] = 1
+                    a[ipx_ref_[ipx[1]]] = 1
+
+        if r == len(mask[mask]):
+            redoit = False
+        if len(u_)<1000000:
+            redoit = False
+        r = len(mask[mask])
+   
+
+    #for i in range(len(w)):
+    #    info[i,:] /= w[i]
+       
+
+
+    # sometimes, removed objects are too many. ++++++++++++
+    #print (new_DV[mask,:])
+    ipx_ref_ = ipx_ref[~mask_w_dummy]
+    add_ = new_DV[~mask_w_dummy,:]
+    removed_excess = 0
+    '''
+    base = len(new_DV[mask,0])
+    for i in frogress.bar(range(add_.shape[0])):
+        if len(new_DV[mask,0])!=base:
+            base = len(new_DV[mask,0])
+            YourTreeName = scipy.spatial.cKDTree(new_DV[mask], leafsize=100) 
+        d,ipx_ = YourTreeName.query(add_[i].reshape(1,-1), k=1, distance_upper_bound=3*radius)
+
+        #if i % 5000 == 0:
+        #    print (' removed excess: ' ,removed_excess)
+            
+        if d>radius:
+            #print ('put back: ',x[ipx_ref_[i]])
+            #print (x[ipx_ref_[i]])
+            #mask[ipx_ref_[i]] = True
+            removed_excess +=1
+
+    print ('\n  excess: ' ,removed_excess)
+    '''
+    return mask,w,info
 
 def select_obj_w(new_DV,even,odd,radius):
     
@@ -238,7 +395,7 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
                     mom = save_[i]['moments'].get_moment(0.,0.)
 
                     if overview_data:
-                        idx = np.in1d(idverview,save_[i]['index_gal'])
+                        idx = np.in1d(idverview,save_[i]['index'])
                         if wverview[idx]>0:
                             w_ = wverview[idx][0]
                             cc =True
@@ -275,7 +432,7 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
                             #print (i)
                             t = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
                             ID_mute = copy.copy(save_[i]['index'])
-                            ID_gal = copy.copy(save_[i]['index_gal'])
+                            ID_gal = copy.copy(save_[i]['index'])
 
                             if overview_data:
                                 class_ = class_w[idx]
@@ -338,6 +495,10 @@ def make_templates(output_folder,**config):
         config['resume_templates_full']
     except:
         config['resume_templates_full'] = False
+    try:
+        config['radius_merging_templates_after_shifting']
+    except:
+        config['radius_merging_templates_after_shifting'] = 0.7
         
     if ('compute' in config['stage']) or ('assembly' in config['stage']):
         
@@ -428,6 +589,8 @@ def make_templates(output_folder,**config):
         except:
             deep_files = glob.glob(output_folder+'/templates/'+'/IS_t*.pkl')
             
+            
+        '''
         moments = []
         moments_odd = []
         error = []
@@ -460,7 +623,7 @@ def make_templates(output_folder,**config):
                     error.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
                     #error_odd.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
                     indexu.append(save_[index]['index'] )
-                    indexu_gal.append(save_[index]['index_gal'] )
+                    indexu_gal.append(save_[index]['index'] )
                     try:
                         mf_per_band.append(save_[index]['mf_per_band'] )
                     except:
@@ -482,8 +645,55 @@ def make_templates(output_folder,**config):
                         pass
             except:
                 print (df)
-                
-                
+        '''
+
+        pool = multiprocessing.Pool(processes=6)
+        xlist = np.arange(len(deep_files))
+        uu = pool.map(partial(dd_,deep_files=deep_files), xlist)
+
+
+        ra = []
+        dec = []
+        ra_DF = []
+        dec_DF = []
+        MAG_I = []
+        tilename = []
+        p0_ = []
+        p0_PSF_ = []
+        moments = []
+        moments_odd = []
+        error = []
+        indexu = []
+        indexu_gal = []
+        for i in range(len(uu)):
+            if i == 0:
+                ra =      uu[i][0]
+                dec =     uu[i][1]
+                ra_DF =   uu[i][2]
+                dec_DF =  uu[i][3]
+                MAG_I =   uu[i][4]
+                tilename =uu[i][5]
+                p0_ =     uu[i][6]
+                p0_PSF_ = uu[i][7]  
+                moments = uu[i][8]  
+                moments_odd = uu[i][9]  
+                error =       uu[i][10]  
+                indexu =      uu[i][11]  
+                indexu_gal =  uu[i][12]  
+            else:
+                ra = np.hstack([ra,uu[i][0]])
+                dec =  np.hstack([dec,uu[i][1]])
+                ra_DF =  np.hstack([ra_DF,uu[i][2]])
+                dec_DF =  np.hstack([dec_DF,uu[i][3]])
+                MAG_I =  np.hstack([MAG_I,uu[i][4]])
+                tilename =  np.hstack([tilename,uu[i][5]])
+                p0_ =  np.hstack([p0_,uu[i][6]])
+                p0_PSF_ =  np.hstack([p0_PSF_,uu[i][7]])   
+                moments     =  np.vstack([moments    ,uu[i][8]])
+                moments_odd =  np.vstack([moments_odd,uu[i][9]])
+                error       =  np.vstack([error      ,uu[i][10]])
+                indexu      =  np.hstack([indexu     ,uu[i][11]])
+                indexu_gal  =  np.hstack([indexu_gal ,uu[i][12]])
         # match with des y3 catalog ----
         print ('des_y3_match ', config['des_y3_match'])
         if config['des_y3_match']:
@@ -500,6 +710,8 @@ def make_templates(output_folder,**config):
                 mf_per_band = np.array(mf_per_band)[id_mask,:]
             except:
                 pass
+            
+           
             indexu = np.array(indexu)[id_mask]
             indexu_gal = np.array(indexu_gal)[id_mask]
             
@@ -768,11 +980,11 @@ def make_templates(output_folder,**config):
                         else:
                             old_exists = False
                             m = load_obj(path+name)
-                        if old_exists:
+                        if not old_exists:
                             os.system('mv {0} {1}'.format(path+name+'.pkl',path+'old_'+name+'.pkl'))
                         index_gal = []
                         for ii in ((m.keys())):
-                            index_gal.append(m[ii]['index_gal'])
+                            index_gal.append(m[ii]['index'])
                         index_gal = np.array(index_gal)
 
 
@@ -814,7 +1026,10 @@ def make_templates(output_folder,**config):
             comm = MPI.COMM_WORLD
             print("Hello! I'm rank %d from %d running in total..." % (comm.rank, comm.size))
             if (run_count+comm.rank) < len(runs):
-                pipeline(output_folder,config, deep_files, targets_properties, runs, run_count+comm.rank)
+                try:
+                    pipeline(output_folder,config, deep_files, targets_properties, runs, run_count+comm.rank)
+                except:
+                    pass
             run_count+=comm.size
             comm.bcast(run_count,root = 0)
             comm.Barrier() 
@@ -831,75 +1046,77 @@ def make_templates(output_folder,**config):
 
                 if (run_count+comm.rank) < noisetier:
                     t_index = t_entries[run_count+comm.rank]
+                    if not os.path.exists(output_folder+'/templates_NOISETIER_{0}.fits'.format(t_index)):
+                       
 
 
 
-                    config['sigma_xy'] =   targets_properties[t_index]['sigma_xy']
-                    config['sigma_flux'] = targets_properties[t_index]['sigma_flux']
+                        config['sigma_xy'] =   targets_properties[t_index]['sigma_xy']
+                        config['sigma_flux'] = targets_properties[t_index]['sigma_flux']
 
 
 
-                    tab_templates = TemplateTable(n = config['n'],
-                                sigma = config['sigma'],
-                                sn_min = config['sn_min'], 
-                                sigma_xy = config['sigma_xy'], 
-                                sigma_flux = config['sigma_flux'], 
-                                sigma_step = config['sigma_step'], 
-                                sigma_max = config['sigma_max'],
-                                xy_max = config['xy_max'])
+                        tab_templates = TemplateTable(n = config['n'],
+                                    sigma = config['sigma'],
+                                    sn_min = config['sn_min'], 
+                                    sigma_xy = config['sigma_xy'], 
+                                    sigma_flux = config['sigma_flux'], 
+                                    sigma_step = config['sigma_step'], 
+                                    sigma_max = config['sigma_max'],
+                                    xy_max = config['xy_max'])
 
 
-                    files = glob.glob(output_folder+'/templates/templates_junk/templates_{0}_*.pkl'.format(t_index))
-                    count = 0
-                    print ('number of templates files: ',len(files))
-                    print (AREA*NN_templates)
-                    print (AREA)
-                    print (NN_templates)
-                    
-                    if not STAMP_SIM:
-                        EFFAREA = AREA
-                    else:
-                        EFFAREA = NN_templates
-                        
-                    count = 0
-                    for ii in frogress.bar(range(len(files))):
-                        file = files[ii]
-                        try:
+                        files = glob.glob(output_folder+'/templates/templates_junk/templates_{0}_*.pkl'.format(t_index))
+                        count = 0
+                        print ('number of templates files: ',len(files))
+                        print (AREA*NN_templates)
+                        print (AREA)
+                        print (NN_templates)
 
-                            template_list = load_obj(file.strip('.pkl'))
-                            
-                            for jj_ in (range((len(template_list)))):
-                                
-                                tmpl = template_list[jj_]
-                                #tmpl.id = count
-                                #count += 1
-                                try:
-                                    tmpl.nda  *= 1./EFFAREA*config['correction_factor_selection']
-                                except:
-                                    
-                                    tmpl.nda  *= 1./EFFAREA
-                                tab_templates.add(tmpl)
-                                count += 1
-                        except:
-                            print ('failed ','.'+file.strip('.pkl'))
-                    
+                        if not STAMP_SIM:
+                            EFFAREA = AREA
+                        else:
+                            EFFAREA = NN_templates
 
-                    
-                    '''
-                    
-                    boia
-                    '''
-                    print ('total templates ',count)
-                    print ('done')
+                        count = 0
+                        for ii in frogress.bar(range(len(files))):
+                            file = files[ii]
+                            try:
+
+                                template_list = load_obj(file.strip('.pkl'))
+
+                                for jj_ in (range((len(template_list)))):
+
+                                    tmpl = template_list[jj_]
+                                    #tmpl.id = count
+                                    #count += 1
+                                    try:
+                                        tmpl.nda  *= 1./EFFAREA*config['correction_factor_selection']
+                                    except:
+
+                                        tmpl.nda  *= 1./EFFAREA
+                                    tab_templates.add(tmpl)
+                                    count += 1
+                            except:
+                                print ('failed ','.'+file.strip('.pkl'))
 
 
-                    end = timeit.default_timer()
-                    print ('saving NOISETIER #',t_index, ', # templates: ',(len(tab_templates.templates))   )
-                    
 
-                    save_template(tab_templates,output_folder+'/templates_NOISETIER_{0}.fits'.format(t_index),EFFAREA,t_index)
-                    #except:
-                    #    pass
+                        '''
+
+                        boia
+                        '''
+                        print ('total templates ',count)
+                        print ('done')
+
+
+                        end = timeit.default_timer()
+                        print ('saving NOISETIER #',t_index, ', # templates: ',(len(tab_templates.templates))   )
+
+
+                        save_template(tab_templates,output_folder+'/templates_NOISETIER_{0}.fits'.format(t_index),EFFAREA,t_index)
+                        #except:
+                        #    pass
 
 
 
@@ -908,3 +1125,100 @@ def make_templates(output_folder,**config):
                 comm.Barrier() 
         print ('done assembly')
 
+
+        
+    if 'group_templates' in config['stage']:
+        run_count = 0
+
+        NT_ = fits.open(output_folder+'/noisetiers.fits') 
+        noisetier = len(NT_)-1
+        while run_count <noisetier:
+
+                comm = MPI.COMM_WORLD
+                print(" I'm rank %d from %d running in total..." % (comm.rank, comm.size))
+
+                if (run_count+comm.rank) < noisetier:
+      
+    
+    
+       
+                    #output_folder = '/global/cfs/cdirs/des/mgatti/BFD_targets/BFD_targets_0/'
+                    fitsname  = output_folder+'templates_NOISETIER_{0}_compact.fits'.format(run_count+comm.rank)
+                    if not os.path.exists(fitsname):
+                        print (fitsname)
+                        file = output_folder+'templates_NOISETIER_{0}.fits'.format(run_count+comm.rank)
+
+                        mute = fits.open(file)
+                        moments = mute[1].data['moments']
+
+                        md1 = mute[1].data['moments_dg1']
+                        md2 = mute[1].data['moments_dg2']
+                        mdm = mute[1].data['moments_dmu']
+                        md1d1 = mute[1].data['moments_dg1_dg1']
+                        md2d2 = mute[1].data['moments_dg2_dg2']
+                        md1d2 = mute[1].data['moments_dg1_dg2']
+                        mdmd1 = mute[1].data['moments_dmu_dg1']
+                        mdmd2 = mute[1].data['moments_dmu_dg2']
+                        mdmdm = mute[1].data['moments_dmu_dmu']
+                        w = mute[1].data['weight']
+                        j = mute[1].data['jSuppress']
+                        info = np.hstack([moments,md1,md2,mdm,md1d1,md2d2,md1d2,mdmd1,mdmd2,mdmdm,j.reshape(-1,1)])
+
+                        nt = fits.open(output_folder+'/noisetiers.fits')
+
+
+                        # set concentration to 0 **********************************
+                        moments[:,-1] = 0.
+
+                        u,o = bulkUnpack(nt[run_count+comm.rank+1].data['COVARIANCE'][:,:])
+                        u[-1],o[-1]
+                        new_cov = np.zeros((7,7))
+                        new_cov[:5,:5] = u[1]
+                        new_cov[5:,5:] = o[1]     
+                        L = np.linalg.cholesky(np.linalg.inv(new_cov))
+                        new_DV_ = np.matmul(moments,L)
+
+                        mask_w,w_new,new_info = select_obj_w_special(new_DV_,w,np.array(info),config['radius_merging_templates_after_shifting'])  
+
+                        maskw = w_new!=0
+                        ix = 0
+                        col1 = fits.Column(name="id",format="K",array=np.arange(new_info.shape[0])[maskw])
+                        ix = 0
+                        col2 = fits.Column(name="moments",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix  += 7 
+                        col3 = fits.Column(name="moments_dg1",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix += 7
+                        col4 = fits.Column(name="moments_dg2",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix += 7
+                        col5 = fits.Column(name="moments_dmu",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix += 7
+                        col6 = fits.Column(name="moments_dg1_dg1",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix += 7
+                        col8 = fits.Column(name="moments_dg2_dg2",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix += 7
+                        col7 = fits.Column(name="moments_dg1_dg2",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix += 7
+                        col9 = fits.Column(name="moments_dmu_dg1",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix += 7
+                        col10 = fits.Column(name="moments_dmu_dg2",format="7E",array=new_info[maskw,ix:ix+7])
+                        ix += 7
+                        col11= fits.Column(name="moments_dmu_dmu",format="7E",array=new_info[maskw,ix:ix+7])
+                        col12= fits.Column(name="weight",format="E",array=w_new[maskw])
+                        ix += 7
+                        col13= fits.Column(name="jSuppress",format="E",array=new_info[maskw,ix:ix+1])
+
+
+                        cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13])
+                        tbhdu = fits.BinTableHDU.from_columns(cols, header=mute[1].header)
+                        prihdu = fits.PrimaryHDU()
+                        thdulist = fits.HDUList([prihdu,tbhdu])
+                        thdulist.writeto(fitsname,overwrite=True)
+
+
+
+
+
+
+                run_count+=comm.size
+                comm.bcast(run_count,root = 0)
+                comm.Barrier() 
