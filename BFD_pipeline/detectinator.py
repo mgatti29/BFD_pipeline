@@ -483,7 +483,7 @@ class Detection(object):
         
         kvar = (np.ones_like(kval,dtype=float) \
             * (noise_rms*self.pad_factor*self.tile_size[0])**2 \
-            / (kpsf.real*kpsf.real))
+            / (kpsf.real*kpsf.real+kpsf.imag*kpsf.imag))
 
         mf_cov = np.sum( (self.w_blackman * self.w_blackman) * kvar * self.d2k * self.d2k * self.conjugate)
 
