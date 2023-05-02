@@ -758,8 +758,8 @@ class Image:
                                                                           minsep=5)
                         
                                             
-                            mf_sort = mf_map[dx[:,0].astype(np.int),dx[:,1].astype(np.int)].argsort()
-                            dx = dx[mf_sort]
+                            #mf_sort = mf_map[dx[:,0].astype(np.int),dx[:,1].astype(np.int)].argsort()
+                           # dx = dx[mf_sort]
                             wcs_ = copy.deepcopy(self.wcslist[index_band][exp])
                             wcs_.xy0 = dx[0]
                             wcss.append(wcs_)
