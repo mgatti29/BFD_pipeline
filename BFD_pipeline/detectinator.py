@@ -555,6 +555,7 @@ class Detection(object):
             M0.append(self.eMoments(dx[i],kval)[0])
             
         mf_sort = np.array(M0).argsort()
+        dx_init = dx_init[mf_sort]
         dx = dx[mf_sort]
 
             
