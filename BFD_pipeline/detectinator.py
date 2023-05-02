@@ -543,7 +543,7 @@ class Detection(object):
         dx_init,kval,kvar,mf_map,mf_cov = self.detector(tile,psf,noise_rms=noise_rms,sn=sn)
         
         dx_init = dx_init[np.sqrt(np.sum((dx_init-self.tile_size/2)**2,axis=1))<minsep]
-        
+        M0 = []
         dx = np.zeros_like(dx_init,dtype='float')
         for i in range(dx.shape[0]):
             dx[i] = root(
@@ -552,10 +552,15 @@ class Detection(object):
                 jac=self.xy_jacobian,
                 args=(kval),
                 tol=tol).x
+            M0.append(self.eMoments(dx[i],kval)[0])
+            
+        mf_sort = np.array(M0).argsort()
+        dx = dx[mf_sort]
 
             
             
         return dx,dx_init,kval,self.ku,self.kv,self.d2k,self.conjugate,kvar,mf_map,mf_cov
+
 
 
 def Detectinator(
