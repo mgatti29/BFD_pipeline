@@ -751,7 +751,7 @@ class Image:
                         
                         if Detectinator:
                             dx,dx_init,kval,ku,kv,d2k,conjugate,kvar,mf_map,mf_cov = Detectinator(img,
-                                                                          psf=self.images[index].psf[index_band][exp],
+                                                                          psf=self.psf[index_band][exp],
                                                                           noise_rms=noise_rms,
                                                                           sn=3,
                                                                           duv_dxy=duv_dxy,
