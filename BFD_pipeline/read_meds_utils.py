@@ -675,7 +675,7 @@ class Image:
 
 
     def compute_moments_multiband(self, sigma = 3, use_COADD_only = False, bands = ['r', 'i', 'z'], 
-                                  band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, MOF_subtraction = False,pad_factor=1.,filter_='KBlackmanHarris',Detectinator=False):
+                                  band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, MOF_subtraction = False,pad_factor=1.,filter_='KBlackmanHarris',Detectinator_=False):
         '''
         Compute moments combining exposures and bands
         '''
@@ -749,7 +749,7 @@ class Image:
                             noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
                  
                         
-                        if Detectinator:
+                        if Detectinator_:
                             dx,dx_init,kval,ku,kv,d2k,conjugate,kvar,mf_map,mf_cov = Detectinator(img,
                                                                           psf=self.psf[index_band][exp],
                                                                           noise_rms=noise_rms,
@@ -757,12 +757,12 @@ class Image:
                                                                           duv_dxy=duv_dxy,
                                                                           minsep=5)
                         
-                                            
                             #mf_sort = mf_map[dx[:,0].astype(np.int),dx[:,1].astype(np.int)].argsort()
                            # dx = dx[mf_sort]
                             wcs_ = copy.deepcopy(self.wcslist[index_band][exp])
                             wcs_.xy0 = dx[0]
                             wcss.append(wcs_)
+                            print ('Detectinator')
                         else:
                             wcss.append(self.wcslist[index_band][exp])
                         
@@ -1464,7 +1464,7 @@ class DetectionsTable:
                     pass
         return M      
         
-    def compute_moments(self, sigma, bands = 'All', use_COADD_only = True, flags = 'All', MOF_subtraction = True, band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, chunk_range = None,pad_factor = 1., filter_ = 'KBlackmanHarris',Detectinator=False):
+    def compute_moments(self, sigma, bands = 'All', use_COADD_only = True, flags = 'All', MOF_subtraction = True, band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, chunk_range = None,pad_factor = 1., filter_ = 'KBlackmanHarris',Detectinator_=False):
         self.params['sigma'] = sigma
         
         if chunk_range == None:
@@ -1496,7 +1496,7 @@ class DetectionsTable:
                     band_dict_to_use['index'] = list(np.arange(len(band_dict_to_use['weights'] )))
   
        
-                    self.images[i].compute_moments_multiband(sigma = sigma, bands = bands_to_use, use_COADD_only = use_COADD_only, MOF_subtraction = MOF_subtraction, band_dict = band_dict_to_use,pad_factor = pad_factor, filter_ = filter_,Detectinator=Detectinator)
+                    self.images[i].compute_moments_multiband(sigma = sigma, bands = bands_to_use, use_COADD_only = use_COADD_only, MOF_subtraction = MOF_subtraction, band_dict = band_dict_to_use,pad_factor = pad_factor, filter_ = filter_,Detectinator_=Detectinator_)
                 
                 
                 #except:
