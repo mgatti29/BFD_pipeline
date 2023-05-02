@@ -21,9 +21,7 @@ import astropy.io.fits as fits
 import frogress
 import shredder
 import esutil as eu
-
-from .detectinator import multicenterImage
-
+from .detectinator import Detectinator
 
 
 spline_interp_flags = np.sum([1,2,16,64,1024,2048])
@@ -398,6 +396,7 @@ class Image:
         if count ==0:
             return bkg_tot,100000000000000
         else:
+            #print (len_v/count)
             return bkg_tot/count,len_v/count
                         
                         
@@ -676,7 +675,7 @@ class Image:
 
 
     def compute_moments_multiband(self, sigma = 3, use_COADD_only = False, bands = ['r', 'i', 'z'], 
-                                  band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, MOF_subtraction = False,pad_factor=1.,filter_='KBlackmanHarris',templates=False):
+                                  band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, MOF_subtraction = False,pad_factor=1.,filter_='KBlackmanHarris',Detectinator=False):
         '''
         Compute moments combining exposures and bands
         '''
@@ -723,7 +722,7 @@ class Image:
                  
                         
            
-                        wcss.append(self.wcslist[index_band][exp])
+                       
                             
 
                         
@@ -742,22 +741,38 @@ class Image:
                         
                         psfn_[len(psfn_)//2,len(psfn_)//2] = 1.
                         psfs_None.append(psfn_)
+                        
                         try:
                        
                             noise_rms = self.noise_rms[index_band][exp]
                         except:
                             noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
-                        #print ('pixel_noise ',noise_rms)
+                 
+                        
+                        if Detectinator:
+                            dx,dx_init,kval,ku,kv,d2k,conjugate,kvar,mf_map,mf_cov = Detectinator(img,
+                                                                          psf=tab_detections.images[index].psf[index_band][exp],
+                                                                          noise_rms=noise_rms,
+                                                                          sn=3,
+                                                                          duv_dxy=duv_dxy,
+                                                                          minsep=5)
+                        
+                            wcs_ = copy.deepcopy(self.wcslist[index_band][exp])
+                            wcs_.xy0 = dx[0]
+                            wcss.append(wcs_)
+                        else:
+                            wcss.append(self.wcslist[index_band][exp])
+                        
+                        
                         #print ('im_noise ',np.std(self.imlist[index_band][exp]))
                         noise.append(noise_rms)
                         bandlist.append(self.bands[index_band])
                         shap = np.array(self.imlist[index_band][exp].shape)/2.
-        if templates:
-            kds = multicenterImage(imgs,psfs,noises,duv_dxys,sn=3,band=band)
-            kds_PSF = multicenterImage(psfs_Nones,psfs,noises,duv_dxys,sn=0.1,band=band)
-        else:
-            kds = bfd.multiImage(imgs, (0,0), psfs, wcss, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
-            kds_PSF = bfd.multiImage(psfs, (0,0), psfs_None, wcss_psf, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
+                        
+        kds = bfd.multiImage(imgs, (0,0), psfs, wcss, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
+        
+        #
+        kds_PSF = bfd.multiImage(psfs, (0,0), psfs_None, wcss_psf, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
         
         #wt = mc.KSigmaWeight(sigma = sigma) 
         if filter_ == 'KBlackmanHarris':
@@ -767,12 +782,10 @@ class Image:
             
         mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = band_dict)
         mul_PSF = bfd.MultiMomentCalculator(kds_PSF, wt, bandinfo = band_dict)
-
-        if templates:
-            pass
-        else:
-            xyshift_PSF, error_PSF,msg  = mul_PSF.recenter()
-            self.xyshift, error,msg = mul.recenter()
+        
+        xyshift_PSF, error_PSF,msg  = mul_PSF.recenter()
+        
+        self.xyshift, error,msg = mul.recenter()
  
         self.moments = mul
         self.moments_PSF = mul_PSF
@@ -903,10 +916,8 @@ class Image:
         self.psf_params_average['g1'] /= wt
         self.psf_params_average['g2'] /= wt
         self.psf_params_average['T']  /= wt
-try:
-    import pyfits as pf
-except:
-    import astropy.io.fits as pf
+
+import pyfits as pf
 class MOF_table:
     def __init__(self, path, shredder = False):
         '''
@@ -1450,7 +1461,7 @@ class DetectionsTable:
                     pass
         return M      
         
-    def compute_moments(self, sigma, bands = 'All', use_COADD_only = True, flags = 'All', MOF_subtraction = True, band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, chunk_range = None,pad_factor = 1., filter_ = 'KBlackmanHarris'):
+    def compute_moments(self, sigma, bands = 'All', use_COADD_only = True, flags = 'All', MOF_subtraction = True, band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, chunk_range = None,pad_factor = 1., filter_ = 'KBlackmanHarris',Detectinator=False):
         self.params['sigma'] = sigma
         
         if chunk_range == None:
@@ -1482,7 +1493,7 @@ class DetectionsTable:
                     band_dict_to_use['index'] = list(np.arange(len(band_dict_to_use['weights'] )))
   
        
-                    self.images[i].compute_moments_multiband(sigma = sigma, bands = bands_to_use, use_COADD_only = use_COADD_only, MOF_subtraction = MOF_subtraction, band_dict = band_dict_to_use,pad_factor = pad_factor, filter_ = filter_)
+                    self.images[i].compute_moments_multiband(sigma = sigma, bands = bands_to_use, use_COADD_only = use_COADD_only, MOF_subtraction = MOF_subtraction, band_dict = band_dict_to_use,pad_factor = pad_factor, filter_ = filter_,Detectinator=Detectinator)
                 
                 
                 #except:
@@ -1747,6 +1758,8 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         savemoments_dmu_dg1 = []
         savemoments_dmu_dg2 = []
         savemoments_dmu_dmu = []
+        area_integral = []
+        #area_integral
         p0 = []
         p0_PSF = []
         id = []
@@ -1759,83 +1772,87 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         # crazy enough this has to
         k = 0
         for i in frogress.bar(range(len(self.templates))):
-            tmpl =self.templates[k]
-            # obtain moments and derivs
-            m0 = tmpl.get_moment()
-            m1_dg1 = tmpl.get_dg1()
-            m1_dg2 = tmpl.get_dg2()
-            m1_dmu = tmpl.get_dmu()
-            m2_dg1_dg1 = tmpl.get_dg1_dg1()
-            m2_dg1_dg2 = tmpl.get_dg1_dg2()
-            m2_dg2_dg2 = tmpl.get_dg2_dg2()
-            m2_dmu_dg1 = tmpl.get_dmu_dg1()
-            m2_dmu_dg2 = tmpl.get_dmu_dg2()
-            m2_dmu_dmu = tmpl.get_dmu_dmu()
+                tmpl =self.templates[k]
             
-            #insert
-            
-            #self.templates.insert(i,None)
-            # append to each list, merging even and odd moments
-            savemoments.append(np.append(m0.even,m0.odd))
-            savemoments_dg1.append(np.append(m1_dg1.even,m1_dg1.odd))
-            savemoments_dg2.append(np.append(m1_dg2.even,m1_dg2.odd))
-            savemoments_dmu.append(np.append(m1_dmu.even,m1_dmu.odd))
-            savemoments_dg1_dg1.append(np.append(m2_dg1_dg1.even,m2_dg1_dg1.odd))
-            savemoments_dg1_dg2.append(np.append(m2_dg1_dg2.even,m2_dg1_dg2.odd))
-            savemoments_dg2_dg2.append(np.append(m2_dg2_dg2.even,m2_dg2_dg2.odd))
-            savemoments_dmu_dg1.append(np.append(m2_dmu_dg1.even,m2_dmu_dg1.odd)) 
-            savemoments_dmu_dg2.append(np.append(m2_dmu_dg2.even,m2_dmu_dg2.odd)) 
-            savemoments_dmu_dmu.append(np.append(m2_dmu_dmu.even,m2_dmu_dmu.odd)) 
-            nda.append(tmpl.nda)
-            id.append(tmpl.id)
-            try:
-                id_gal.append(tmpl.id_gal)
-                if type(tmpl.class_) == np.chararray:
-                    class_.append(tmpl.class_[0])
-                else:
-                    class_.append(tmpl.class_)
-            except:
-                pass
-            p0_PSF.append(tmpl.p0_PSF)
-            p0.append(tmpl.p0)
-            jSuppression.append(tmpl.jSuppression)
-            #del tmpl
-            k +=1
-            maxa = 100000
-            if k>maxa:
-                k=0
-                self.templates = self.templates[maxa:]
+                # obtain moments and derivs
+                m0 = tmpl.get_moment()
+                m1_dg1 = tmpl.get_dg1()
+                m1_dg2 = tmpl.get_dg2()
+                m1_dmu = tmpl.get_dmu()
+                m2_dg1_dg1 = tmpl.get_dg1_dg1()
+                m2_dg1_dg2 = tmpl.get_dg1_dg2()
+                m2_dg2_dg2 = tmpl.get_dg2_dg2()
+                m2_dmu_dg1 = tmpl.get_dmu_dg1()
+                m2_dmu_dg2 = tmpl.get_dmu_dg2()
+                m2_dmu_dmu = tmpl.get_dmu_dmu()
+
+                #insert
+
+                #self.templates.insert(i,None)
+                # append to each list, merging even and odd moments
+                savemoments.append(np.append(m0.even,m0.odd))
+                savemoments_dg1.append(np.append(m1_dg1.even,m1_dg1.odd))
+                savemoments_dg2.append(np.append(m1_dg2.even,m1_dg2.odd))
+                savemoments_dmu.append(np.append(m1_dmu.even,m1_dmu.odd))
+                savemoments_dg1_dg1.append(np.append(m2_dg1_dg1.even,m2_dg1_dg1.odd))
+                savemoments_dg1_dg2.append(np.append(m2_dg1_dg2.even,m2_dg1_dg2.odd))
+                savemoments_dg2_dg2.append(np.append(m2_dg2_dg2.even,m2_dg2_dg2.odd))
+                savemoments_dmu_dg1.append(np.append(m2_dmu_dg1.even,m2_dmu_dg1.odd)) 
+                savemoments_dmu_dg2.append(np.append(m2_dmu_dg2.even,m2_dmu_dg2.odd)) 
+                savemoments_dmu_dmu.append(np.append(m2_dmu_dmu.even,m2_dmu_dmu.odd)) 
+                nda.append(tmpl.nda)
+                area_integral.append(tmpl.area_integral)
+                id.append(tmpl.id)
+                try:
+                    id_gal.append(tmpl.id_gal)
+                    if type(tmpl.class_) == np.chararray:
+                        class_.append(tmpl.class_[0])
+                    else:
+                        class_.append(tmpl.class_)
+                except:
+                    pass
+                p0_PSF.append(tmpl.p0_PSF)
+                p0.append(tmpl.p0)
+                jSuppression.append(tmpl.jSuppression)
+                #del tmpl
+                k +=1
+                maxa = 100000
+                if k>maxa:
+                    k=0
+                    self.templates = self.templates[maxa:]
             #if i % 100000 == 0:
              #   gc.collect()
         del self.templates
         gc.collect()
         print ('done collecting')
         # Create the primary and table HDUs
-        col1 = fits.Column(name="id",format="K",array=id)
-        col2 = fits.Column(name="moments",format="7E",array=savemoments)
-        col3 = fits.Column(name="moments_dg1",format="7E",array=savemoments_dg1)
-        col4 = fits.Column(name="moments_dg2",format="7E",array=savemoments_dg2)
-        col5 = fits.Column(name="moments_dmu",format="7E",array=savemoments_dmu)
-        col6 = fits.Column(name="moments_dg1_dg1",format="7E",array=savemoments_dg1_dg1)
-        col7 = fits.Column(name="moments_dg1_dg2",format="7E",array=savemoments_dg1_dg2)
-        col8 = fits.Column(name="moments_dg2_dg2",format="7E",array=savemoments_dg2_dg2)
-        col9 = fits.Column(name="moments_dmu_dg1",format="7E",array=savemoments_dmu_dg1)
-        col10 = fits.Column(name="moments_dmu_dg2",format="7E",array=savemoments_dmu_dg2)
-        col11= fits.Column(name="moments_dmu_dmu",format="7E",array=savemoments_dmu_dmu)
-        col12= fits.Column(name="weight",format="E",array=nda)
-        col13= fits.Column(name="jSuppress",format="E",array=jSuppression)
-        col14= fits.Column(name="id_simulated_gal",format="K",array=p0)
-        col15= fits.Column(name="id_simulated_PSF",format="K",array=p0_PSF)
-        if 1==1:
-        #try:
-            print (np.array(class_))
-            col16 = fits.Column(name="id_gal",format="K",array=id_gal)
-            col17 = fits.Column(name="class",format="128A",array=np.array(class_))
-        #except:
+        mask = np.array(area_integral)<1.01
+        col1 = fits.Column(name="id",format="K",array=np.array(id)[mask])
+        col2 = fits.Column(name="moments",format="7E",array=np.array(savemoments)[mask,:])
+        col3 = fits.Column(name="moments_dg1",format="7E",array=np.array(savemoments_dg1)[mask,:])
+        col4 = fits.Column(name="moments_dg2",format="7E",array=np.array(savemoments_dg2)[mask,:])
+        col5 = fits.Column(name="moments_dmu",format="7E",array=np.array(savemoments_dmu)[mask,:])
+        col6 = fits.Column(name="moments_dg1_dg1",format="7E",array=np.array(savemoments_dg1_dg1)[mask,:])
+        col7 = fits.Column(name="moments_dg1_dg2",format="7E",array=np.array(savemoments_dg1_dg2)[mask,:])
+        col8 = fits.Column(name="moments_dg2_dg2",format="7E",array=np.array(savemoments_dg2_dg2)[mask,:])
+        col9 = fits.Column(name="moments_dmu_dg1",format="7E",array=np.array(savemoments_dmu_dg1)[mask,:])
+        col10 = fits.Column(name="moments_dmu_dg2",format="7E",array=np.array(savemoments_dmu_dg2)[mask,:])
+        col11= fits.Column(name="moments_dmu_dmu",format="7E",array=np.array(savemoments_dmu_dmu)[mask,:])
+        col12= fits.Column(name="weight",format="E",array=np.array(nda)[mask])
+        col13= fits.Column(name="jSuppress",format="E",array=np.array(jSuppression)[mask])
+        col14= fits.Column(name="id_simulated_gal",format="K",array=np.array(p0)[mask])
+        col15= fits.Column(name="id_simulated_PSF",format="K",array=np.array(p0_PSF)[mask])
+        col16= fits.Column(name="area_integral",format="E",array=np.array(area_integral)[mask])
+        #if 1==1:
+        ##try:
+        #    print (np.array(class_))
+        #    col16 = fits.Column(name="id_gal",format="K",array=id_gal)
+        #    col17 = fits.Column(name="class",format="128A",array=np.array(class_))
+        ##except:
         #    pass
         if 1==1:
             
-            cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16,col17])
+            cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16])
         #except:
         #    cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15])
         tbhdu = fits.BinTableHDU.from_columns(cols, header=self.hdr)
@@ -1853,6 +1870,58 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         
         thdulist = fits.HDUList([prihdu,tbhdu])
         thdulist.writeto(fitsname,overwrite=True)
+        
+        
+        
+        
+        mask = np.array(area_integral)>1.01
+        col1 = fits.Column(name="id",format="K",array=np.array(id)[mask])
+        col2 = fits.Column(name="moments",format="7E",array=np.array(savemoments)[mask,:])
+        col3 = fits.Column(name="moments_dg1",format="7E",array=np.array(savemoments_dg1)[mask,:])
+        col4 = fits.Column(name="moments_dg2",format="7E",array=np.array(savemoments_dg2)[mask,:])
+        col5 = fits.Column(name="moments_dmu",format="7E",array=np.array(savemoments_dmu)[mask,:])
+        col6 = fits.Column(name="moments_dg1_dg1",format="7E",array=np.array(savemoments_dg1_dg1)[mask,:])
+        col7 = fits.Column(name="moments_dg1_dg2",format="7E",array=np.array(savemoments_dg1_dg2)[mask,:])
+        col8 = fits.Column(name="moments_dg2_dg2",format="7E",array=np.array(savemoments_dg2_dg2)[mask,:])
+        col9 = fits.Column(name="moments_dmu_dg1",format="7E",array=np.array(savemoments_dmu_dg1)[mask,:])
+        col10 = fits.Column(name="moments_dmu_dg2",format="7E",array=np.array(savemoments_dmu_dg2)[mask,:])
+        col11= fits.Column(name="moments_dmu_dmu",format="7E",array=np.array(savemoments_dmu_dmu)[mask,:])
+        col12= fits.Column(name="weight",format="E",array=np.array(nda)[mask])
+        col13= fits.Column(name="jSuppress",format="E",array=np.array(jSuppression)[mask])
+        col14= fits.Column(name="id_simulated_gal",format="K",array=np.array(p0)[mask])
+        col15= fits.Column(name="id_simulated_PSF",format="K",array=np.array(p0_PSF)[mask])
+        col16= fits.Column(name="area_integral",format="E",array=np.array(area_integral)[mask])
+        #if 1==1:
+        ##try:
+        #    print (np.array(class_))
+        #    col16 = fits.Column(name="id_gal",format="K",array=id_gal)
+        #    col17 = fits.Column(name="class",format="128A",array=np.array(class_))
+        ##except:
+        #    pass
+        if 1==1:
+            
+            cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16])
+        #except:
+        #    cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15])
+        tbhdu = fits.BinTableHDU.from_columns(cols, header=self.hdr)
+
+        tbhdu.header['TIER_NUM'] = np.int32(TIER_NUM)
+        tbhdu.header['EFFAREA'] = EFFAREA 
+        print(tbhdu.header)
+        prihdu = fits.PrimaryHDU()
+        try:
+            tbhdu.header['WT_SIG'] = tbhdu.header['WT_SIGMA']
+        except:
+            pass
+
+     
+        
+        thdulist = fits.HDUList([prihdu,tbhdu])
+        
+        ff = fitsname.split('.fits')[0] +'_discarded.fits'
+        thdulist.writeto(ff,overwrite=True)
+        
+        
         return
 
     
@@ -2033,6 +2102,7 @@ def save_(self,fitsname,stamp):
         #    col.append(fits.Column(name="select",format="I",array=self.cov.astype(np.int16)))
         #    
             
+        col.append(fits.Column(name="len_v",format="E",array=np.array(self.len_v)))
         
         col.append(fits.Column(name="AREA",format="D",array=self.AREA))
         
