@@ -22,6 +22,8 @@ import frogress
 import shredder
 import esutil as eu
 
+from .detectinator import multicenterImage
+
 
 
 spline_interp_flags = np.sum([1,2,16,64,1024,2048])
@@ -674,7 +676,7 @@ class Image:
 
 
     def compute_moments_multiband(self, sigma = 3, use_COADD_only = False, bands = ['r', 'i', 'z'], 
-                                  band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, MOF_subtraction = False,pad_factor=1.,filter_='KBlackmanHarris'):
+                                  band_dict = {'r':BandInfo(0.5,0),'i':BandInfo(0.5,1),'z':BandInfo(0.5,2)}, MOF_subtraction = False,pad_factor=1.,filter_='KBlackmanHarris',templates=False):
         '''
         Compute moments combining exposures and bands
         '''
@@ -750,11 +752,12 @@ class Image:
                         noise.append(noise_rms)
                         bandlist.append(self.bands[index_band])
                         shap = np.array(self.imlist[index_band][exp].shape)/2.
-                        
-        kds = bfd.multiImage(imgs, (0,0), psfs, wcss, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
-        
-        #
-        kds_PSF = bfd.multiImage(psfs, (0,0), psfs_None, wcss_psf, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
+        if templates:
+            kds = multicenterImage(imgs,psfs,noises,duv_dxys,sn=3,band=band)
+            kds_PSF = multicenterImage(psfs_Nones,psfs,noises,duv_dxys,sn=0.1,band=band)
+        else:
+            kds = bfd.multiImage(imgs, (0,0), psfs, wcss, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
+            kds_PSF = bfd.multiImage(psfs, (0,0), psfs_None, wcss_psf, pixel_noiselist = noise, bandlist = bandlist,pad_factor=pad_factor)
         
         #wt = mc.KSigmaWeight(sigma = sigma) 
         if filter_ == 'KBlackmanHarris':
@@ -764,10 +767,12 @@ class Image:
             
         mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = band_dict)
         mul_PSF = bfd.MultiMomentCalculator(kds_PSF, wt, bandinfo = band_dict)
-        
-        xyshift_PSF, error_PSF,msg  = mul_PSF.recenter()
-        
-        self.xyshift, error,msg = mul.recenter()
+
+        if templates:
+            pass
+        else:
+            xyshift_PSF, error_PSF,msg  = mul_PSF.recenter()
+            self.xyshift, error,msg = mul.recenter()
  
         self.moments = mul
         self.moments_PSF = mul_PSF
@@ -898,8 +903,10 @@ class Image:
         self.psf_params_average['g1'] /= wt
         self.psf_params_average['g2'] /= wt
         self.psf_params_average['T']  /= wt
-
-import pyfits as pf
+try:
+    import pyfits as pf
+except:
+    import astropy.io.fits as pf
 class MOF_table:
     def __init__(self, path, shredder = False):
         '''
