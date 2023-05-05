@@ -687,7 +687,8 @@ class Image:
         noise = []
         bandlist = []
         psfs_None = []
-        
+        shift =  []
+        nblends = []
         for  band in (bands):
             index_band = np.arange(len(self.bands))[np.array(np.in1d(self.bands,band))]
             if len(index_band) == 0:
@@ -757,14 +758,28 @@ class Image:
                                                                           duv_dxy=duv_dxy,
                                                                           minsep=5)
                         
+                            
                             #mf_sort = mf_map[dx[:,0].astype(np.int),dx[:,1].astype(np.int)].argsort()
                            # dx = dx[mf_sort]
                             wcs_ = copy.deepcopy(self.wcslist[index_band][exp])
-                            wcs_.xy0 = dx[0]
-                            wcss.append(wcs_)
-                            print ('Detectinator')
+    
+                            try:
+                                shift_ =  (dx[0][0]-dx_init[0][0])**2+(dx[0][1]-dx_init[0][1])**2
+                                shift.append(np.sqrt(shift_))
+                                nblends.append(len(dx))
+                                wcs_.xy0 = dx[0]
+                                wcss.append(wcs_)
+                            except:
+                                wcss.append(self.wcslist[index_band][exp])
+                                shift.append(0)
+                                nblends.append(1)
+                                               
+                                
+                            
                         else:
                             wcss.append(self.wcslist[index_band][exp])
+                            shift.append(0)
+                            nblends.append(1)
                         
                         
                         #print ('im_noise ',np.std(self.imlist[index_band][exp]))
@@ -793,6 +808,10 @@ class Image:
         self.moments = mul
         self.moments_PSF = mul_PSF
         self.band_dict = band_dict
+        self.xyshift_detectinator = np.mean(np.array(shift))
+        self.nblends = np.mean(np.array(nblends))
+        
+        
         
         
         return mul
