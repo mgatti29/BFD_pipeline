@@ -25,6 +25,7 @@ import sxdes
 import galsim
 from bfd.momentcalc import MomentCovariance
 import timeit
+from .detectinator import Detectinator
 logger = logging.getLogger(__name__)
 
 
@@ -69,9 +70,15 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
             debug_images['seg']= []
         
         try:
-            config['filter']
+            config['Detectinator']
         except:
-            config['filter'] = 'KBlackmanHarris'       
+            config['Detectinator'] = False
+            
+        try:
+            config['minsep']
+        except:
+            config['minsep'] = 5       
+      
         try:
             
             config['perfect_deblender']
@@ -807,6 +814,8 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                             psf_a = []
                             bands_a = []
                             noise_a = []
+                            shifts = []
+                            nblends = []
 
                             for band in config['bands']:
                                 # cut the image **************************
@@ -1045,17 +1054,49 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                     debug_images['wcs_coordinates'].append(wcs_.xy0)
                                 
                                 #debug_images['images'].append(image_stamp)
+                                
+                                
+                                
+
+                             ###########
+                                if do_templates:
+                                    if config['Detectinator']:
+                                        duv_dxy = np.array([[0.263, 0.],
+                                                    [0., 0.263]])
+
+                                        dx,dx_init,kval,ku,kv,d2k,conjugate,kvar,mf_map,mf_cov = Detectinator(image_stamp,
+                                                                                      psf=psf_image,
+                                                                                      noise_rms=tile[band]['noise_level'],
+                                                                                      sn=3,
+                                                                                      duv_dxy=duv_dxy,
+                                                                                      minsep=config['minsep'])
+
+                                        try:
+                                            cent=(dx[0],dx[1])
+                                            wcs__ = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
+
+                                            shift_ =  (dx[0][0]-dx_init[0][0])**2+(dx[0][1]-dx_init[0][1])**2
+                                            shifts.append(np.sqrt(shift_))
+                                            nblends.append(len(dx))
+
+                                        except:
+                                            shifts.append(0.)
+                                            nblends.append(1.)
+                                    else:
+                                        shifts.append(0.)
+                                        nblends.append(1.)    
+                                        
                                 images_a.append(image_stamp)
                                 wcs_a.append(wcs_)
                                 psf_a.append(psf_image)
                                 bands_a.append(band)
                                 noise_a.append(tile[band]['noise_level'])
 
+                            ###########
+                                
+                                
                             kds = bfd.multiImage(images_a, (0,0), psf_a, wcs_a, pixel_noiselist = noise_a, bandlist = bands_a ,pad_factor= config['pad_factor'])
-                            if config['filter'] =='KBlackmanHarris':
-                                 wt = mc.KBlackmanHarris(sigma = config['sigma']) 
-                            else:                                
-                                 wt = mc.KSigmaWeight(sigma = config['sigma']) 
+                            wt = mc.KSigmaWeight(sigma = config['sigma']) 
                             mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = config['band_dict_code'])
                             xyshift, error,msg = mul.recenter()
                             moments = mul
@@ -1111,6 +1152,8 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                 tab_detections.add_image(Wide_g)
                                
                                 tab_detections.images[ix_].moments = mul
+                                tab_detections.images[ix_].xyshift_detectinator = np.mean(np.array(shift))
+                                tab_detections.images[ix_].nblends = np.mean(np.array(nblends))
 
                                 mom = tab_detections.images[ix_].moments.get_moment(0.,0.)
 
@@ -1290,11 +1333,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                         noise_a.append(tile[band]['noise_level'])
 
                     kds = bfd.multiImage(images_a, (0,0), psf_a, wcs_a, pixel_noiselist = noise_a, bandlist = bands_a ,pad_factor= config['pad_factor'])
-                    if config['filter'] =='KBlackmanHarris':
-                         wt = mc.KBlackmanHarris(sigma = config['sigma']) 
-                    else:                                
-                         wt = mc.KSigmaWeight(sigma = config['sigma']) 
-                        
+                    wt = mc.KSigmaWeight(sigma = config['sigma']) 
                     mul = bfd.MultiMomentCalculator(kds, wt, bandinfo = config['band_dict_code'])
                     
                     #xyshift, error,msg = mul.recenter()
@@ -1513,6 +1552,9 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                     save__[index]['moments'] = tab_detections.images[index].moments
                     save__[index]['index_gal'] = int(ii_chunk*10000)+index#tab_detections.images[index].image_ID[0]
                     save__[index]['index'] = tab_detections.images[index].image_ID[0]
+                    save__[index]['xyshift_detectinator'] = tab_detections.images[ix_].xyshift_detectinator
+                    save__[index]['nblends'] =  tab_detections.images[ix_].nblends
+   
                     try:
                         save__[index]['MOF_index'] = tab_detections.images[index].MOF_index
                         save__[index]['MAG_I'] = tab_detections.images[index].MAG_I
