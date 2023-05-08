@@ -1043,6 +1043,11 @@ def make_templates(output_folder,**config):
                     name = (file.split('.pkl')[0]).split(output_folder+'/templates/')[1]
                     path = output_folder+'/templates/'
                     try:
+                        if not os.path.exists( output_folder+'/templates/old/'):
+                            os.mkdir(output_folder+'/templates/old/')
+                    except:
+                        pass
+                    try:
                     #if 1==1:
                        # if os.path.exists(path+'old_'+name+'.pkl'):
                        #     m = load_obj(path+'old_'+name)
@@ -1050,6 +1055,8 @@ def make_templates(output_folder,**config):
                        # else:
                        #     old_exists = False
                         m = load_obj(path+name)
+                        if not os.path.exists(output_folder+'/templates/old/'+path+name+'.pkl'):
+                             os.system('mv {0} {1}'.format(path+name+'.pkl',output_folder+'/templates/old/'))
                         #    if not old_exists:
                         #        os.system('mv {0} {1}'.format(path+name+'.pkl',path+'old_'+name+'.pkl'))
                         #if not old_exists:
