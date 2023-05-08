@@ -372,10 +372,10 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
 
             #try:
 
-            #try:
-            save_ = load_obj(output_folder+'/templates/'+'templates_'+d_index)
-            #except:
-            #    save_ = load_obj(output_folder+'/templates/'+'IS_templates_'+d_index)
+            try:
+                save_ = load_obj(output_folder+'/templates/'+'templates_'+d_index)
+            except:
+                save_ = load_obj(output_folder+'/templates/'+'IS_templates_'+d_index)
 
            # try:
             cumulative_weight = 0
@@ -732,7 +732,7 @@ def make_templates(output_folder,**config):
                 nblends = np.hstack([nblends,uu[i][14]  ])
                 dmdg =  np.hstack([dmdg,uu[i][15]  ])
                 dmdgdg =  np.hstack([dmdgdg,uu[i][16]  ])
-                print (ra.shape,xyshift_detectinator.shape,nblends.shape)
+                # print (ra.shape,xyshift_detectinator.shape,nblends.shape)
         # match with des y3 catalog ----
         print ('des_y3_match ', config['des_y3_match'])
         if config['des_y3_match']:
