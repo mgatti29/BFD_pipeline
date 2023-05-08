@@ -1552,8 +1552,8 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                     save__[index]['moments'] = tab_detections.images[index].moments
                     save__[index]['index_gal'] = int(ii_chunk*10000)+index#tab_detections.images[index].image_ID[0]
                     save__[index]['index'] = tab_detections.images[index].image_ID[0]
-                    save__[index]['xyshift_detectinator'] = tab_detections.images[ix_].xyshift_detectinator
-                    save__[index]['nblends'] =  tab_detections.images[ix_].nblends
+                    save__[index]['xyshift_detectinator'] = tab_detections.images[index].xyshift_detectinator
+                    save__[index]['nblends'] =  tab_detections.images[index].nblends
    
                     try:
                         save__[index]['MOF_index'] = tab_detections.images[index].MOF_index

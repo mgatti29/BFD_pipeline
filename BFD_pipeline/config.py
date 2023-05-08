@@ -4,6 +4,7 @@
 .. module:: config
 """
 import yaml
+from yaml import Loader
 import numpy as np
 import os
 import sys
@@ -105,6 +106,6 @@ def read_config(file_name):
     """
     import yaml
     with open(file_name) as f_in:
-        config = yaml.load(f_in.read())
+        config = yaml.load(f_in.read(),Loader=Loader)
     config['config_path'] = file_name
     return config
