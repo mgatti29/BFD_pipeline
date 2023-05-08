@@ -939,7 +939,11 @@ class Image:
         self.psf_params_average['g2'] /= wt
         self.psf_params_average['T']  /= wt
 
-import pyfits as pf
+try:
+    import pyfits as pf
+except:
+    from astropy.io import fits as pf
+
 class MOF_table:
     def __init__(self, path, shredder = False):
         '''
