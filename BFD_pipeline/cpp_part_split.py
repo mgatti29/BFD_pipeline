@@ -16,7 +16,7 @@ from bfd.keywords import *
 
 def f_(uu,output_folder,noise_tiers,path_cpp):
     os.system('cp {0}/noisetiers.fits {0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[uu]))
-    str_ = '{2}tierSelection {0}/noisetiers_{1}.fits {0}/templates_NOISETIER_{1}_compact.fits'.format(output_folder,noise_tiers[uu],path_cpp)
+    str_ = '{2}tierSelection {0}/noisetiers_{1}.fits {0}/templates_NOISETIER_{1}.fits'.format(output_folder,noise_tiers[uu],path_cpp)
    # print (str_)
     os.system(str_)      
 
@@ -40,7 +40,10 @@ def cpp_part(output_folder,**config):
     config['output_folder'] = output_folder
     path_cpp = config['path_cpp']
     
-    
+    try:
+        config['nSample']
+    except:
+        config['nSample'] = 30000
     try:
     
         config['medium_SN']
@@ -146,7 +149,7 @@ def cpp_part(output_folder,**config):
                         
                     run_count = 0
 
-                    #'''
+                    '''
                     comm = MPI.COMM_WORLD
                     if comm.rank==0:
                         m = fits.open('{0}/noisetiers.fits'.format(output_folder))
@@ -179,7 +182,7 @@ def cpp_part(output_folder,**config):
                             
                     comm.bcast(run_count,root = 0)
                     comm.Barrier() 
-                    #'''
+                    '''
                     run_count = 0
 
                     import time
@@ -362,7 +365,7 @@ def cpp_part(output_folder,**config):
                                 
                                 # divide templates into chunks +++++++++++++++++
 
-                                templatesfile = output_folder+'/templates_NOISETIER_{0}_compact.fits'.format(noise_tiers[cc])
+                                templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[cc])
                                 templates_ = fits.open(templatesfile)
                                 templates_i = copy.copy(templates_)
                                 len_templ =  templates_[1].header['NAXIS2']  #len(templates_[1].data['ID'])
@@ -400,6 +403,7 @@ def cpp_part(output_folder,**config):
                                             templates_i[1].header['TIER_NUM'] = templates_[1].header['TIER_NUM']
 
                                             # save the new target files ****
+                                            #'''
                                             try:
                                                 templates_i.writeto(output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[cc],n))
                                             except:
@@ -408,7 +412,7 @@ def cpp_part(output_folder,**config):
                                                 except:
                                                     pass
 
-
+                                           # '''
                                 
                                 
                                     
@@ -459,15 +463,18 @@ def cpp_part(output_folder,**config):
 
 
                                             # save the new target files ****
-                                            try:
-                                                targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[cc],n,tt))
-                                            except:
-                                                #try:
-                                                    targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[cc],n,tt),overwrite = True)# 
-                                                #except:
-                                            #    pass
+                                            if not os.path.exists(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[cc],n,tt)):
+                                                print (output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[cc],n,tt))
+                                                #'''
+                                                try:
+                                                    targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[cc],n,tt))
+                                                except:
+                                                    #try:
+                                                        targets_i.writeto(output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[cc],n,tt),overwrite = True)# 
+                                                    #except:
+                                                #    pass
                                             
-                                        
+                                               # '''                                     
                             if config['MPI']:
                                 run_count+=comm.size
                                 comm.bcast(run_count,root = 0)
@@ -545,7 +552,7 @@ def cpp_part(output_folder,**config):
                         while run_count< len(noise_tiers):
                             if run_count<len(noise_tiers):
                                 #print (len(runstodo))
-                                templatesfile = output_folder+'/templates_NOISETIER_{0}_compact.fits'.format(noise_tiers[run_count])
+                                templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[run_count])
                                # print (templatesfile,len(runstodo))
                                 templates_ = fits.open(templatesfile)
                                 len_templ = templates_[1].header['NAXIS2'] #len(templates_[1].data['ID'])
@@ -574,10 +581,12 @@ def cpp_part(output_folder,**config):
                                         m_ = fits.open(targetfile)
                                         
                                         if not os.path.exists(ff):
-                                        #if 'NUNIQUE' in m_[1].data.names:
+                                        #if  (m_[1].header['NAXIS2']>4000000):
+                                        #    if  'NUNIQUE' in m_[1].data.names:
                                         #    pass
                                         #else:
-                                            #if  (m_[1].header['NAXIS2']<2000000):# and (m_[1].header['NAXIS2']<1000000):
+                                            #if  (m_[1].header['NAXIS2']<1000000000):# &  (m_[1].header['NAXIS2']<5000000):# and (m_[1].header['NAXIS2']<1000000):
+                                            #if 'NUNIQUE' not in m_[1].data.names:
                                                 runstodo.append([run_count,n,tt])
                                             #if  m_[1].header['NAXIS2']<100000:
                                             #    runstodo.append([run_count,n,tt])
@@ -586,8 +595,8 @@ def cpp_part(output_folder,**config):
                         
                         run_count = 0
                         
-                        print ('runsotodo: ',len(runstodo))
-                        #'''
+                        print ('runsotodo: ',len(runstodo),runstodo)
+                       # '''
                         while run_count< len(runstodo):
                             comm = MPI.COMM_WORLD
                             if run_count+comm.rank<len(runstodo):
@@ -606,7 +615,7 @@ def cpp_part(output_folder,**config):
                                 #if 1==1:
                                     noistierfile = output_folder+'noisetiers.fits'
                                     templatesfile = output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[xx],n)
-                                    str_ = '{3}/tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2} -addnoiseSN {4} -noiseFactor 1,{5} -chunk 2000 -nSample 3000 '.format(targetfile,noistierfile,templatesfile,path_cpp,medium_SN,noise_factor)
+                                    str_ = '{3}/tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2} -addnoiseSN {4} -noiseFactor 1,{5} -chunk 2000 -nSample {6} '.format(targetfile,noistierfile,templatesfile,path_cpp,medium_SN,noise_factor,config['nSample']) #-nSample 30000 
                                     os.system(str_)
                                     
                                     ff = output_folder+'/done_runs/targets_sample_g_{1}_{2}_{3}'.format(add,noise_tiers[xx],n,tt)
@@ -615,7 +624,7 @@ def cpp_part(output_folder,**config):
                             run_count+=comm.size
                             comm.bcast(run_count,root = 0)
                             comm.Barrier() 
-                        #'''                      
+                       # '''                      
 
         for add in add_labels:
             path_templates = config['output_folder']
