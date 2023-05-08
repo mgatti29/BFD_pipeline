@@ -36,7 +36,7 @@ import numpy as np
 from bfd import Moment
 import gc
 import pandas as pd
-
+import math
 import multiprocessing
 from functools import partial   
 
@@ -63,9 +63,12 @@ def dd_(ii,deep_files):
     indexu_gal = [0]
 
     mf_per_band = []
+    dmdg = [0]
+    dmdgdg = [0]
         
     
-    
+    nblends = [0]
+    xyshift_detectinator = [0]
     df = deep_files[ii]
     try:
         save_ = load_obj(df.strip('.pkl'))
@@ -78,6 +81,22 @@ def dd_(ii,deep_files):
             error.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
             #error_odd.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
             indexu.append(save_[index]['index'] )
+
+            try:
+                nblends.append(save_[index]['nblends'])
+                xyshift_detectinator.append(save_[index]['xyshift_detectinator'])        
+            except:
+                
+                nblends.append(1)
+                xyshift_detectinator.append(1)
+    
+            try:
+                dmdg.append(save_[index]['dMdg1'])        
+                dmdgdg.append(save_[index]['dMdg1dg2'])            
+            except:
+                dmdg.append(0)
+                dmdgdg.append(0)
+   
             try:
                 indexu_gal.append(save_[index]['index_gal'] )
             except:
@@ -103,7 +122,7 @@ def dd_(ii,deep_files):
                 pass
     except:
         pass
-    return [ra,dec,ra_DF,dec_DF,MAG_I,tilename,p0_,p0_PSF_,np.array(moments),np.array(moments_odd),np.array(error),np.array(indexu),np.array(indexu_gal)]
+    return [ra,dec,ra_DF,dec_DF,MAG_I,tilename,p0_,p0_PSF_,np.array(moments),np.array(moments_odd),np.array(error),np.array(indexu),np.array(indexu_gal), np.array(xyshift_detectinator),np.array(nblends),np.array(dmdg),np.array(dmdgdg)]
 
         
     
@@ -353,10 +372,10 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
 
             #try:
 
-            try:
-                save_ = load_obj(output_folder+'/templates/'+'templates_'+d_index)
-            except:
-                save_ = load_obj(output_folder+'/templates/'+'IS_templates_'+d_index)
+            #try:
+            save_ = load_obj(output_folder+'/templates/'+'templates_'+d_index)
+            #except:
+            #    save_ = load_obj(output_folder+'/templates/'+'IS_templates_'+d_index)
 
            # try:
             cumulative_weight = 0
@@ -430,40 +449,48 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
                     if mask_bool:
                             cumulative_weight1 += w_ 
                             #print (i)
-                            t = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
+                            #True, result, xy_kept, area_integral
+                            flag_p, t, xy_kept, area_integral = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
                             ID_mute = copy.copy(save_[i]['index'])
                             ID_gal = copy.copy(save_[i]['index'])
 
-                            if overview_data:
-                                class_ = class_w[idx]
-                            else:
-                                class_ = '-100_-100_-100'
+                            if flag_p:
+                                if overview_data:
+                                    class_ = class_w[idx]
+                                else:
+                                    class_ = '-100_-100_-100'
 
-                            gc.collect()
-                            try:
-                                p0 = save_[i]['p0']
-                                p0_PSF = save_[i]['p0_PSF']
+                                gc.collect()
+                                try:
+                                    p0 = save_[i]['p0']
+                                    p0_PSF = save_[i]['p0_PSF']
 
-                            except:
+                                except:
 
-                                p0 = 0
-                                p0_PSF = 0
+                                    p0 = 0
+                                    p0_PSF = 0
 
-                            if t[0] is None:
-                                continue
-                            else:   
-                                for tmpl in t:
-                                    count +=1
-                                    tmpl.p0 = p0
-                                    tmpl.p0_PSF = p0_PSF
-                                    tmpl.id = ID_mute
-                                    tmpl.id_gal = ID_gal
-                                    tmpl.class_ = class_
-                                    tmpl.nda *= w_/downsample_factor
-                                    templates.append(tmpl)
-                                    #print ('---- w', tmpl.nda)
-                                    cumulative_weight +=  tmpl.nda
+                                if len(t)>0:
+                                    if t[0] is None:
+                                        continue
+                                    else:   
+                                        for tmpl in t:
+                                            count +=1
+                                            tmpl.p0 = p0
+                                            tmpl.p0_PSF = p0_PSF
+                                            tmpl.id = ID_mute
+                                            tmpl.id_gal = ID_gal
+                                            tmpl.class_ = class_
+                                            tmpl.area_integral = area_integral
+                                            tmpl.nblends =  save_[i]['nblends']
+                                            tmpl.xy_kept = xy_kept
+                                            tmpl.nda *= w_/downsample_factor
+                                            templates.append(tmpl)
+                                            #print ('---- w', tmpl.nda)
+                                            cumulative_weight +=  tmpl.nda
 
+            print ('COUNT TEMPLATES ',count)
+            
             save_obj(output_folder+'/templates/templates_junk/templates_{0}_{1}'.format(t_index,d_index),templates)
 
             del save_
@@ -495,10 +522,6 @@ def make_templates(output_folder,**config):
         config['resume_templates_full']
     except:
         config['resume_templates_full'] = False
-    try:
-        config['radius_merging_templates_after_shifting']
-    except:
-        config['radius_merging_templates_after_shifting'] = 0.7
         
     if ('compute' in config['stage']) or ('assembly' in config['stage']):
         
@@ -583,12 +606,13 @@ def make_templates(output_folder,**config):
         print ('resume templates')
         
 
-        deep_files = glob.glob(output_folder+'/templates/'+'/t*.pkl')
-        try:
-            deep_files[0]
-        except:
-            deep_files = glob.glob(output_folder+'/templates/'+'/IS_t*.pkl')
-            
+
+        deep_files = glob.glob(output_folder+'/templates/'+'/IS_t*.pkl')
+        if len(deep_files)==0:
+            deep_files = glob.glob(output_folder+'/templates/'+'/t*.pkl')
+            #if len(deep_files)==0:
+            #    deep_files = glob.glob(output_folder+'/templates/'+'/old*.pkl')
+                
             
         '''
         moments = []
@@ -665,6 +689,11 @@ def make_templates(output_folder,**config):
         error = []
         indexu = []
         indexu_gal = []
+        xyshift_detectinator = []
+        nblends =[]
+        dmdg = []
+        dmdgdg = []
+
         for i in range(len(uu)):
             if i == 0:
                 ra =      uu[i][0]
@@ -680,6 +709,10 @@ def make_templates(output_folder,**config):
                 error =       uu[i][10]  
                 indexu =      uu[i][11]  
                 indexu_gal =  uu[i][12]  
+                xyshift_detectinator =  uu[i][13]  
+                nblends = uu[i][14]  
+                dmdg =  uu[i][15]  
+                dmdgdg =  uu[i][16]  
             else:
                 ra = np.hstack([ra,uu[i][0]])
                 dec =  np.hstack([dec,uu[i][1]])
@@ -694,6 +727,11 @@ def make_templates(output_folder,**config):
                 error       =  np.vstack([error      ,uu[i][10]])
                 indexu      =  np.hstack([indexu     ,uu[i][11]])
                 indexu_gal  =  np.hstack([indexu_gal ,uu[i][12]])
+                xyshift_detectinator =  np.hstack([xyshift_detectinator,uu[i][13]  ])
+                nblends = np.hstack([nblends,uu[i][14]  ])
+                dmdg =  np.hstack([dmdg,uu[i][15]  ])
+                dmdgdg =  np.hstack([dmdgdg,uu[i][16]  ])
+                print (ra.shape,xyshift_detectinator.shape,nblends.shape)
         # match with des y3 catalog ----
         print ('des_y3_match ', config['des_y3_match'])
         if config['des_y3_match']:
@@ -715,6 +753,11 @@ def make_templates(output_folder,**config):
             indexu = np.array(indexu)[id_mask]
             indexu_gal = np.array(indexu_gal)[id_mask]
             
+            xyshift_detectinator = np.array(xyshift_detectinator)[id_mask]
+            nblends = np.array(nblends)[id_mask]
+            
+            dmdg  = np.array(dmdg)[id_mask]
+            dmdgdg  = np.array(dmdgdg)[id_mask]
             try:
                 mof_index = mof_index[id_mask]
                 ra = ra[id_mask]
@@ -764,7 +807,13 @@ def make_templates(output_folder,**config):
             except:
                 pass
 
-      
+
+            try:
+                col.append(fits.Column(name="xyshift_detectinator",format="E",array=np.array(xyshift_detectinator)))
+                col.append(fits.Column(name="nblends",format="E",array=np.array(nblends)))
+            except:
+                pass     
+
             tbhdu = fits.BinTableHDU.from_columns(col)
             prihdu = fits.PrimaryHDU()
             thdulist = fits.HDUList([prihdu,tbhdu])
@@ -869,7 +918,8 @@ def make_templates(output_folder,**config):
         u,o = bulkUnpack(nt[-1].data['COVARIANCE'][:,:])
         mask_u = moments[:,0]/np.sqrt(u[1,0,0]) < config['sn_max']
 
-        mask_total = mask_u & mask_l & (newweigths>0)
+        mask_total = mask_u & mask_l & (newweigths>0) & (xyshift_detectinator<5)
+        
         class_[~mask_total] = '-100_-100_-100'
 
                     
@@ -901,6 +951,16 @@ def make_templates(output_folder,**config):
             p0_PSF_ = np.array(p0_PSF_)[mask_total]
         except:
             pass
+        
+        try:
+            
+            xyshift_detectinator = xyshift_detectinator[mask_total]
+            nblends = nblends[mask_total]
+            dmdg = dmdg[mask_total]
+            dmdgdg = dmdgdg[mask_total]
+        except:
+            pass
+            
         class_ = class_[mask_total] 
         
         
@@ -948,6 +1008,15 @@ def make_templates(output_folder,**config):
         except:
             pass
         
+
+        try:
+            col.append(fits.Column(name="xyshift_detectinator",format="E",array=np.array(xyshift_detectinator)))
+            col.append(fits.Column(name="nblends",format="E",array=np.array(nblends)))
+            col.append(fits.Column(name="dmdg",format="E",array=np.array(dmdg)))
+            col.append(fits.Column(name="dmdgdg",format="E",array=np.array(dmdgdg)))
+        except:
+                pass    
+            
         col.append(fits.Column(name="class",format="128A",array=np.array(class_)))
         tbhdu = fits.BinTableHDU.from_columns(col)
         prihdu = fits.PrimaryHDU()
@@ -974,14 +1043,17 @@ def make_templates(output_folder,**config):
                     name = (file.split('.pkl')[0]).split(output_folder+'/templates/')[1]
                     path = output_folder+'/templates/'
                     try:
-                        if os.path.exists(path+'old_'+name+'.pkl'):
-                            m = load_obj(path+'old_'+name)
-                            old_exists = True
-                        else:
-                            old_exists = False
-                            m = load_obj(path+name)
-                        if not old_exists:
-                            os.system('mv {0} {1}'.format(path+name+'.pkl',path+'old_'+name+'.pkl'))
+                    #if 1==1:
+                       # if os.path.exists(path+'old_'+name+'.pkl'):
+                       #     m = load_obj(path+'old_'+name)
+                       #     old_exists = True
+                       # else:
+                       #     old_exists = False
+                        m = load_obj(path+name)
+                        #    if not old_exists:
+                        #        os.system('mv {0} {1}'.format(path+name+'.pkl',path+'old_'+name+'.pkl'))
+                        #if not old_exists:
+                        #    os.system('mv {0} {1}'.format(path+name+'.pkl',path+'old_'+name+'.pkl'))
                         index_gal = []
                         for ii in ((m.keys())):
                             index_gal.append(m[ii]['index'])
@@ -996,20 +1068,27 @@ def make_templates(output_folder,**config):
                         for i in to_del:
                             del m[i]
 
-                        save_obj(output_folder+'/templates/'+(file.split('.pkl')[0]).split(output_folder+'/templates/')[1],m)
+                        tot_templ = len(m)
+                        chunks = math.ceil(tot_templ/1000)
+                        if tot_templ>0:
+                            for ch in range(chunks):
+                                m1 = copy.deepcopy(m)
+                                for iii,kk in enumerate(list(m.keys())):
+                                    if not ((iii>1000*ch) & (iii<=1000*(ch+1))):
+                                        del m1[kk]
+                                save_obj(output_folder+'/templates/'+(file.split('.pkl')[0]+'_subchunk_{0}'.format(ch)).split(output_folder+'/templates/')[1],m1)
+                                del m1
 
                         del m
                         gc.collect()
+    
                     except:
                         print ('failed ',path+name)  
 
     
     
     
-    
-    
-    
-    
+
     
     
     
@@ -1026,10 +1105,10 @@ def make_templates(output_folder,**config):
             comm = MPI.COMM_WORLD
             print("Hello! I'm rank %d from %d running in total..." % (comm.rank, comm.size))
             if (run_count+comm.rank) < len(runs):
-                try:
+                #try:
                     pipeline(output_folder,config, deep_files, targets_properties, runs, run_count+comm.rank)
-                except:
-                    pass
+               # except:
+                #    pass
             run_count+=comm.size
             comm.bcast(run_count,root = 0)
             comm.Barrier() 
@@ -1178,8 +1257,10 @@ def make_templates(output_folder,**config):
                         L = np.linalg.cholesky(np.linalg.inv(new_cov))
                         new_DV_ = np.matmul(moments,L)
 
-                        mask_w,w_new,new_info = select_obj_w_special(new_DV_,w,np.array(info),config['radius_merging_templates_after_shifting'])  
+                        mask_w,w_new,new_info = select_obj_w_special(new_DV_,w,np.array(info),0.7)  
 
+                  
+                        
                         maskw = w_new!=0
                         ix = 0
                         col1 = fits.Column(name="id",format="K",array=np.arange(new_info.shape[0])[maskw])
