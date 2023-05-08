@@ -1873,7 +1873,7 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         col15= fits.Column(name="id_simulated_PSF",format="K",array=np.array(p0_PSF)[mask])
         col16= fits.Column(name="area_integral",format="E",array=np.array(area_integral)[mask])
         col17= fits.Column(name="nblends",format="E",array=np.array(nblends)[mask])
-        col18= fits.Column(name="nblends",format="E",array=np.array(xyshift_detectinator)[mask])
+        col18= fits.Column(name="xyshift_detectinator",format="E",array=np.array(xyshift_detectinator)[mask])
         #if 1==1:
         ##try:
         #    print (np.array(class_))
@@ -1923,7 +1923,7 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         col15= fits.Column(name="id_simulated_PSF",format="K",array=np.array(p0_PSF)[mask])
         col16= fits.Column(name="area_integral",format="E",array=np.array(area_integral)[mask])
         col17= fits.Column(name="nblends",format="E",array=np.array(nblends)[mask])
-        col18= fits.Column(name="nblends",format="E",array=np.array(xyshift_detectinator)[mask])
+        col18= fits.Column(name="xyshift_detectinator",format="E",array=np.array(xyshift_detectinator)[mask])
         ##try:
         #    print (np.array(class_))
         #    col16 = fits.Column(name="id_gal",format="K",array=id_gal)
