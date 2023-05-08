@@ -1152,7 +1152,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                 tab_detections.add_image(Wide_g)
                                
                                 tab_detections.images[ix_].moments = mul
-                                tab_detections.images[ix_].xyshift_detectinator = np.mean(np.array(shift))
+                                tab_detections.images[ix_].xyshift_detectinator = np.mean(np.array(shifts))
                                 tab_detections.images[ix_].nblends = np.mean(np.array(nblends))
 
                                 mom = tab_detections.images[ix_].moments.get_moment(0.,0.)
