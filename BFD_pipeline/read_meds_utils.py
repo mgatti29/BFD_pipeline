@@ -1772,7 +1772,6 @@ def save_targets(self):
         return self.prihdu,tbhdu
     
     
-    
 def save_template(self, fitsname,EFFAREA,TIER_NUM):
         savemoments=[]
         savemoments_dg1 = []
@@ -1785,6 +1784,7 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         savemoments_dmu_dg2 = []
         savemoments_dmu_dmu = []
         area_integral = []
+        nblends = []
         #area_integral
         p0 = []
         p0_PSF = []
@@ -1828,6 +1828,7 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
                 savemoments_dmu_dmu.append(np.append(m2_dmu_dmu.even,m2_dmu_dmu.odd)) 
                 nda.append(tmpl.nda)
                 area_integral.append(tmpl.area_integral)
+                nblends.append(tmpl.nblends)
                 id.append(tmpl.id)
                 try:
                     id_gal.append(tmpl.id_gal)
@@ -1869,6 +1870,7 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         col14= fits.Column(name="id_simulated_gal",format="K",array=np.array(p0)[mask])
         col15= fits.Column(name="id_simulated_PSF",format="K",array=np.array(p0_PSF)[mask])
         col16= fits.Column(name="area_integral",format="E",array=np.array(area_integral)[mask])
+        col17= fits.Column(name="nblends",format="E",array=np.array(nblends)[mask])
         #if 1==1:
         ##try:
         #    print (np.array(class_))
@@ -1878,7 +1880,7 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         #    pass
         if 1==1:
             
-            cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16])
+            cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16,col17])
         #except:
         #    cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15])
         tbhdu = fits.BinTableHDU.from_columns(cols, header=self.hdr)
@@ -1917,7 +1919,7 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         col14= fits.Column(name="id_simulated_gal",format="K",array=np.array(p0)[mask])
         col15= fits.Column(name="id_simulated_PSF",format="K",array=np.array(p0_PSF)[mask])
         col16= fits.Column(name="area_integral",format="E",array=np.array(area_integral)[mask])
-        #if 1==1:
+        col17= fits.Column(name="nblends",format="E",array=np.array(nblends)[mask])
         ##try:
         #    print (np.array(class_))
         #    col16 = fits.Column(name="id_gal",format="K",array=id_gal)
@@ -1926,7 +1928,7 @@ def save_template(self, fitsname,EFFAREA,TIER_NUM):
         #    pass
         if 1==1:
             
-            cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16])
+            cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15,col16,col17])
         #except:
         #    cols = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,col10,col11,col12,col13,col14,col15])
         tbhdu = fits.BinTableHDU.from_columns(cols, header=self.hdr)
