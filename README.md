@@ -22,7 +22,7 @@ python 3.6.3
 - psfex (0.4.0) [https://github.com/esheldon/psfex.git]
 - shredder  (1.0.0) [https://github.com/esheldon/shredder.git] [ngmix2 branch]
 - meds (0.9.16) [https://github.com/esheldon/meds.git]
-- sxdes (0.2.0) [https://github.com/esheldon/sxdes.git]
+- sxdes (0.3.0) [https://github.com/esheldon/sxdes.git]
 - sep (1.2.1)
 - pytest
 - pyyaml (5.4.1)
