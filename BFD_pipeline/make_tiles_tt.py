@@ -1072,7 +1072,7 @@ def pipeline_targets(config, params_image_sims, ii_chunk, do_templates = False):
                                                                                       minsep=config['minsep'])
 
                                         try:
-                                            cent=(dx[0],dx[1])
+                                            cent=(dx[0][0],dx[0][1])
                                             wcs__ = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
 
                                             shift_ =  (dx[0][0]-dx_init[0][0])**2+(dx[0][1]-dx_init[0][1])**2
