@@ -149,7 +149,7 @@ def cpp_part(output_folder,**config):
                         
                     run_count = 0
 
-                    '''
+                    #'''
                     comm = MPI.COMM_WORLD
                     if comm.rank==0:
                         m = fits.open('{0}/noisetiers.fits'.format(output_folder))
@@ -182,7 +182,7 @@ def cpp_part(output_folder,**config):
                             
                     comm.bcast(run_count,root = 0)
                     comm.Barrier() 
-                    '''
+                    #'''
                     run_count = 0
 
                     import time
