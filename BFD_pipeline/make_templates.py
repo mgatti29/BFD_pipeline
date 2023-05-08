@@ -483,6 +483,7 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
                                             tmpl.class_ = class_
                                             tmpl.area_integral = area_integral
                                             tmpl.nblends =  save_[i]['nblends']
+                                            tmpl.xyshift_detectinator =  save_[i]['xyshift_detectinator']
                                             tmpl.xy_kept = xy_kept
                                             tmpl.nda *= w_/downsample_factor
                                             templates.append(tmpl)
