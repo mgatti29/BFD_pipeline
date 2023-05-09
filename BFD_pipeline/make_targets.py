@@ -187,7 +187,7 @@ def make_targets(output_folder,**config):
                                     except:
                                  
                                         results_[cname] = np.hstack([results_[cname],mute[1].data[cname]])
-                        mask =( ~np.isnan(results_['covariance'][:,0]))& (results_['covariance'][:,0]>0.) 
+                        mask =( ~np.isnan(results_['covariance'][:,0]))& (results_['covariance'][:,0]>0.) & (results_['covariance'][:,0]!=np.inf)
                         if config['match_to_gold']:
                             gold =  np.load('/global/cfs/cdirs/des/BFD_Y6/gold_id.npy',allow_pickle=True)
                             match = np.in1d(results_['id'],gold)
