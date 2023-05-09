@@ -85,7 +85,7 @@ def cpp_part(output_folder,**config):
                 except:
                     noise_tiers = np.unique(targets[1].data['NOISETIER'])
                     noise_tiers = noise_tiers[noise_tiers!=-1]
-                print (noise_tiers)
+                # print (noise_tiers)
 
                 if 'selection' in todos:
                     
@@ -93,7 +93,7 @@ def cpp_part(output_folder,**config):
                         
                         chunks = len(noise_tiers)
                         run_count = 0
-                        print (chunks)
+                        # print (chunks)
                         while run_count<chunks: #chunks:
                             comm = MPI.COMM_WORLD
                             if run_count+comm.rank<chunks:#len(noise_tiers):
@@ -136,11 +136,12 @@ def cpp_part(output_folder,**config):
                     else:
                         chunks = len(noise_tiers)
 
-                        run_count = 0
+                        # run_count = 0
 
-                        while run_count<chunks: #chunks:
+                        # while run_count<chunks: #chunks:
+                        for __ in range(chunks):
                             _ = f_(run_count,output_folder=output_folder,noise_tiers=noise_tiers,path_cpp=path_cpp)
-                            run_count +=1
+                            # run_count +=1
                         
                         
 
@@ -156,26 +157,24 @@ def cpp_part(output_folder,**config):
                         noise_tiers = np.arange(0,len(noise_tiers))
                         for i_ in range(len(noise_tiers)):
                             mx = fits.open('{0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[i_]))
-                            #try:
-                            m[i_+1] = mx[i_+1]
-                            #except:
-                            #    m.append(mx[i_+1])
-
-
+                            # try:
+                            m[i_+1] = mx[i_+1].copy()
+                            # except:
+                            #     m.append(mx[i_+1])
                                 
                                 
 
                         prihdu = fits.PrimaryHDU()
                         u = fits.HDUList([fits.PrimaryHDU()])
                         for i in range(len(m)-1):
-                            u_ = fits.BinTableHDU.from_columns(m[i+1].columns)
-                            keys_ = ['TIER_NUM','EXTNAME','COVMXMX','COVMXMY','COVMYMY','SIG_XY','SIG_FLUX','STARTA00','STEPA00','INDEXA00','STARTA01','STEPA01','INDEXA01','MONO_1_0','MONO_1_1','MONO_2_0','MONO_2_1','MONO_3_0','MONO_3_1','ELLIP_1','ELLIP_2','FLUX_MIN','FLUX_MAX','WT_N','WT_SIGMA']
+                            u_ = fits.BinTableHDU.from_columns(m[i+1].columns,header=m[i+1].header)
+#                             keys_ = ['TIER_NUM','EXTNAME','COVMXMX','COVMXMY','COVMYMY','SIG_XY','SIG_FLUX','STARTA00','STEPA00','INDEXA00','STARTA01','STEPA01','INDEXA01','MONO_1_0','MONO_1_1','MONO_2_0','MONO_2_1','MONO_3_0','MONO_3_1','ELLIP_1','ELLIP_2','FLUX_MIN','FLUX_MAX','WT_N','WT_SIGMA']
 
-                            for k in keys_:
-                                try:
-                                    u_.header[k] = mx[i+1].header[k]
-                                except:
-                                    pass
+#                             for k in keys_:
+#                                 try:
+#                                     u_.header[k] = mx[i+1].header[k]
+#                                 except:
+                                    # pass
         
                             u.append(u_)
                         u.writeto(output_folder+'/noisetiers.fits',overwrite = True)# 
@@ -555,7 +554,7 @@ def cpp_part(output_folder,**config):
                                 templatesfile = output_folder+'/templates_NOISETIER_{0}.fits'.format(noise_tiers[run_count])
                                # print (templatesfile,len(runstodo))
                                 templates_ = fits.open(templatesfile)
-                                len_templ = templates_[1].header['NAXIS2'] #len(templates_[1].data['ID'])
+                                len_templ = copy.copy(templates_[1].header['NAXIS2']) #len(templates_[1].data['ID'])
                                 n_batch_templates = math.ceil(len_templ/config['bacth_size_templates'])
                                 del templates_
                                 import gc
@@ -587,7 +586,7 @@ def cpp_part(output_folder,**config):
                                         #else:
                                             #if  (m_[1].header['NAXIS2']<1000000000):# &  (m_[1].header['NAXIS2']<5000000):# and (m_[1].header['NAXIS2']<1000000):
                                             #if 'NUNIQUE' not in m_[1].data.names:
-                                                runstodo.append([run_count,n,tt])
+                                            runstodo.append([run_count,n,tt])
                                             #if  m_[1].header['NAXIS2']<100000:
                                             #    runstodo.append([run_count,n,tt])
                             run_count+=1
@@ -608,18 +607,18 @@ def cpp_part(output_folder,**config):
                                 targetfile = output_folder+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[xx],n,tt)
                                  # try to see if it has been run already ----
                                 m_ = fits.open(targetfile)
-                                try:
+                                # try:
                                 #    nou
-                                    m_[1].data['NUNIQUE']
-                                except:
+                                    # m_[1].data['NUNIQUE']
+                                # except:
                                 #if 1==1:
-                                    noistierfile = output_folder+'noisetiers.fits'
-                                    templatesfile = output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[xx],n)
-                                    str_ = '{3}/tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2} -addnoiseSN {4} -noiseFactor 1,{5} -chunk 2000 -nSample {6} '.format(targetfile,noistierfile,templatesfile,path_cpp,medium_SN,noise_factor,config['nSample']) #-nSample 30000 
-                                    os.system(str_)
-                                    
-                                    ff = output_folder+'/done_runs/targets_sample_g_{1}_{2}_{3}'.format(add,noise_tiers[xx],n,tt)
-                                    np.save(ff,1)
+                                noistierfile = output_folder+'noisetiers.fits'
+                                templatesfile = output_folder+'/templates_NOISETIER_{0}_{1}.fits'.format(noise_tiers[xx],n)
+                                str_ = '{3}/tableIntegrate -targetfile={0} -noisetierFile={1} -templateFile={2} -addnoiseSN {4} -noiseFactor 1,{5} -chunk 2000 -nSample {6} '.format(targetfile,noistierfile,templatesfile,path_cpp,medium_SN,noise_factor,config['nSample']) #-nSample 30000 
+                                os.system(str_)
+
+                                ff = output_folder+'/targets_sample_g_{1}_{2}_{3}'.format(add,noise_tiers[xx],n,tt)
+                                np.save(ff,1)
 
                             run_count+=comm.size
                             comm.bcast(run_count,root = 0)
@@ -703,17 +702,17 @@ def cpp_part(output_folder,**config):
                                             end = min([len(mask[mask]),(tt+1)*config['bacth_size_targets']])
 
                                             #if 1==1:
-                                            try:
-                                                targets_i = fits.open(path_templates+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt))  
-                                                ma = np.in1d(np.arange(len(mask_targets)),np.arange(len(mask_targets))[mask_targets][start:end][targets_i[1].data['SELECT']])
-                                                NUNIQUE[ma] += targets_i[1].data['NUNIQUE'][targets_i[1].data['SELECT']]
-                                                pqr[ma] += targets_i[1].data['PQR'][targets_i[1].data['SELECT']]
+                                            # try:
+                                            targets_i = fits.open(path_templates+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt))  
+                                            ma = np.in1d(np.arange(len(mask_targets)),np.arange(len(mask_targets))[mask_targets][start:end][targets_i[1].data['SELECT']])
+                                            NUNIQUE[ma] += targets_i[1].data['NUNIQUE'][targets_i[1].data['SELECT']]
+                                            pqr[ma] += targets_i[1].data['PQR'][targets_i[1].data['SELECT']]
 
-                                                ma = np.in1d(np.arange(len(mask_targets)),np.arange(len(mask_targets))[mask_targets][start:end][~targets_i[1].data['SELECT']])
-                                                NUNIQUE[ma] = targets_i[1].data['NUNIQUE'][~targets_i[1].data['SELECT']]
-                                                pqr[ma] = targets_i[1].data['PQR'][~targets_i[1].data['SELECT']]
-                                            except:
-                                                print  ('failed ---: ',path_templates+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt))
+                                            ma = np.in1d(np.arange(len(mask_targets)),np.arange(len(mask_targets))[mask_targets][start:end][~targets_i[1].data['SELECT']])
+                                            NUNIQUE[ma] = targets_i[1].data['NUNIQUE'][~targets_i[1].data['SELECT']]
+                                            pqr[ma] = targets_i[1].data['PQR'][~targets_i[1].data['SELECT']]
+                                            # except:
+                                            #     print  ('failed ---: ',path_templates+'/{0}targets_sample_g_{1}_{2}_{3}.fits'.format(add,noise_tiers[run_count],n,tt))
 
 
 
@@ -726,7 +725,7 @@ def cpp_part(output_folder,**config):
                             #except:
                             #    pass
                             #try:
-                            #    c['NUNIQUE'].array=NUNIQUE
+                                # c['NUNIQUE'].array=NUNIQUE
                             #except:
                             #    pass
                             for k in c:

@@ -30,6 +30,7 @@ from bfd.keywords import *
 from bfd import TierCollection
 import numpy as np
 from bfd import Moment
+from .createTiers import createTiers
 
 
 
@@ -236,7 +237,7 @@ def make_targets(output_folder,**config):
                         hdulist[0].header['STAMPS'] = mute[0].header['STAMPS']
                         #hdulist[0].header['NLOST'] = nlost
                  
-                        hdulist.append(hdu)
+                        hdulist.append(hdu.copy())
                         del hdu
 
                         try:
@@ -269,10 +270,17 @@ def make_targets(output_folder,**config):
         if config['re_run_noisetiers']:
             if os.path.exists(output_folder+'/noisetiers.fits'):
                 os.remove(output_folder+'/noisetiers.fits')
-            os.system('python BFD_pipeline/createTiers.py {0} --snMin {1} --snMax  {2} --fluxMin {3} --fluxMax {4} --noiseStep {6} --psfStep {7} --output {5}'.format(filex,config['sn_min'],config['sn_max'],config['Mf_min'],config['Mf_max'],output_folder+'/noisetiers.fits',config['noiseStep'],config['psfStep']))
+
+            tc = createTiers([filex],config['noiseStep'],config['psfStep'],config['Mf_min'],config['Mf_max'],config['sn_min'],config['sn_max'])
+            tc.save(output_folder+'/noisetiers.fits')
+            
+            # os.system('python BFD_pipeline/createTiers.py {0} --snMin {1} --snMax  {2} --fluxMin {3} --fluxMax {4} --noiseStep {6} --psfStep {7} --output {5}'.format(filex,config['sn_min'],config['sn_max'],config['Mf_min'],config['Mf_max'],output_folder+'/noisetiers.fits',config['noiseStep'],config['psfStep']))
         else:
             if not os.path.exists(output_folder+'/noisetiers.fits'):
-                os.system('python BFD_pipeline/createTiers.py {0} --snMin {1} --snMax  {2} --fluxMin {3} --fluxMax {4}  --noiseStep {6} --psfStep {7}  --output {5}'.format(filex,config['sn_min'],config['sn_max'],config['Mf_min'],config['Mf_max'],output_folder+'/noisetiers.fits',config['noiseStep'],config['psfStep']))
+                # os.system('python BFD_pipeline/createTiers.py {0} --snMin {1} --snMax  {2} --fluxMin {3} --fluxMax {4}  --noiseStep {6} --psfStep {7}  --output {5}'.format(filex,config['sn_min'],config['sn_max'],config['Mf_min'],config['Mf_max'],output_folder+'/noisetiers.fits',config['noiseStep'],config['psfStep']))
+                
+                tc = createTiers([filex],config['noiseStep'],config['psfStep'],config['Mf_min'],config['Mf_max'],config['sn_min'],config['sn_max'])
+                tc.save(output_folder+'/noisetiers.fits')
         
         # ASSIGN NOISE TIERS ********************
         from bfd import TierCollection
@@ -297,6 +305,8 @@ def make_targets(output_folder,**config):
                     noise_tiers = np.zeros(m_[1].data['covariance'].shape[0]).astype(np.int)
                     for key in n_.keys():
                         noise_tiers[n_[key]]=key
+                        
+                    
 
                     # dismiss stuff that doesn't pass the cuts ***********
                     
@@ -368,7 +378,9 @@ def make_targets(output_folder,**config):
                         hdu.data['class'] = class_u
                     hdu.data['NOISETIER'] = noise_tiers
                     
-                    
+                    print('NOISETIER')
+                    print(hdu.data['NOISETIER'])
+                    print('--------------')
                     
                     # ++++++++++++++
                     m__ = (~mask) & (hdu.data['AREA']==0)
@@ -377,7 +389,7 @@ def make_targets(output_folder,**config):
                     for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
                         hdu.header[key] = m_[0].header[key]
                         
-                    hdulist.append(hdu)
+                    hdulist.append(hdu.copy())
 
                         
                         
@@ -429,7 +441,7 @@ def make_targets(output_folder,**config):
                         hdu.header['COVMXMX'] = mean_c
                         hdu.header['COVMXMY'] = 0.5*np.mean(m_[1].data['covariance'][:,3])
                         hdu.header['COVMYMY'] = mean_c
-                        hdulist.append(hdu)
+                        hdulist.append(hdu.copy())
                         
 
                         del hdu
@@ -447,7 +459,7 @@ def make_targets(output_folder,**config):
                         hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add))
                     except:
                         try:
-                            hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add),clobber = True)# 
+                            hdulist.writeto(output_folder+'/{1}{0}_sample_g.fits'.format(tt,add),overwrite = True)# 
                         except:
                             pass
           

@@ -450,7 +450,12 @@ def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
                             cumulative_weight1 += w_ 
                             #print (i)
                             #True, result, xy_kept, area_integral
-                            flag_p, t, xy_kept, area_integral = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
+                            try:
+                                flag_p, t, xy_kept, area_integral = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
+                            except:
+                                flag_p = False
+                                t = []
+                                
                             ID_mute = copy.copy(save_[i]['index'])
                             ID_gal = copy.copy(save_[i]['index'])
 

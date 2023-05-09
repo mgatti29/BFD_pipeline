@@ -57,6 +57,7 @@ def createTiers(targetFile=None,
         # Save a random subsample of the covariances
         keep = np.random.random(size=len(hdu.data)) < sample
         covs.append(hdu.data['covariance'][keep])
+        # covs.append(hdu.data['covariance'])
         
     if not covs:
         raise ValueError('No target covariances acquired')
