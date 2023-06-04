@@ -8,11 +8,91 @@ import gc
 import numpy as np
 
 
+def bulkUnpack(packed):
+        '''Convert an Nx15 packed 1d version of even matrix into Nx5x5 array'''
+        m = Moment()
+        out = np.zeros( (packed.shape[0],m.NE,m.NE), dtype=float)
+        
+        j=0
+        for i in range(m.NE):
+            nvals = m.NE - i
+            out[:,i,i:] = packed[:,j:j+nvals]
+            out[:,i:,i] = packed[:,j:j+nvals]
+            j += nvals
+            
+        odd = np.zeros( (packed.shape[0],m.NO, m.NO), dtype=float)
+        odd[:,m.MX, m.MX] = 0.5*(out[:,m.M0,m.MR]+out[:,m.M0,m.M1])
+        odd[:,m.MY, m.MY] = 0.5*(out[:,m.M0,m.MR]-out[:,m.M0,m.M1])
+        odd[:,m.MX, m.MY] =  0.5*out[:,m.M0,m.M2]
+        odd[:,m.MY, m.MX] =  0.5*out[:,m.M0,m.M2]
+            
+            
+        return out,odd
+    
+def rotate(e,o,phi):
+    '''Return Moment instance for this object rotated by angle phi radians
+    '''
+    e = copy.deepcopy(e)
+    o = copy.deepcopy(o)
+    #e = np.array(self.even)
+    z = (e[2] + 1j*e[3]) * np.exp(2j*phi)
+    e[2] = z.real
+    e[3] = z.imag
+    z = (o[0] + 1j*o[1]) * np.exp(1j*phi)
+    o = np.array([z.real,z.imag])
+    
+    return e.T,o.T
+
+def angle(e):
+    """
+    It takes as a input a an array of moments (Mf,Mr,M1,M2,Mc) and returns the angle described by M1 and M2.
+    
+    Returns
+    -------
+    flux moment SN
+    """
+    return np.arctan((e[3]/e[2]))
+
+
+def produce_cov(t):
+    """
+    It takes as a input a loaded fits file describing the targets and return the flux moment covariance
+    
+    Returns
+    -------
+    flux moment covariance
+    """
+    return (t[1].data['covariance'][:,0])
+
+def produce_mf(t):
+    """
+    It takes as a input a loaded fits file describing the targets and return the flux moment
+    
+    Returns
+    -------
+    flux moment
+    """
+    return t[1].data['moments'][:,0]
+
+def produce_sn(t):    
+    """
+    It takes as a input a loaded fits file describing the targets and return the SN of the flux moment.
+    
+    Returns
+    -------
+    flux moment SN
+    """
+    return t[1].data['moments'][:,0]/np.sqrt(t[1].data['covariance'][:,0])
 
 def collapse(path, name_):
-    # Function to collapse data from multiple files into a single FITS file.
-    # This is mostly used to collapse templates files together after measuring their moments in chunks.
+    """
+    Function to collapse data from multiple files into a single FITS file.
+    This is mostly used to collapse templates files together after measuring their moments in chunks.
     
+    Returns
+    -------
+    None
+    """
     # Append the 'name_' value to the 'path'
     path = path + name_
     
