@@ -5,164 +5,75 @@ import astropy.io.fits as fits
 from bfd.keywords import *
 import os
 import gc
-def save_obj(name, obj):
-    with open(name + '.pkl', 'wb') as f:
-        pickle.dump(obj, f, protocol=3)
-        
-def load_obj(name):
-        try:
-            with open(name + '.pkl', 'rb') as f:
-                return pickle.load(f)#, encoding='latin1')
-        except:
-            with open(name + '.pkl', 'rb') as f:
-                return pickle.load(f, encoding='latin1')
-
-
-
-
-# saving utilities
-import astropy.io.fits as fits
 import numpy as np
-def save_moments_targets(self,fitsname,config):
-        '''
-        modified save function for moments with different sigma_Mf entries
-        '''
-        col=[]
-        col.append(fits.Column(name="id",format="K",array=self.id))
-        try:
-            if len(self.p0)>0:
-                col.append(fits.Column(name="id_simulated_gal",format="K",array=self.p0))
-                col.append(fits.Column(name="id_simulated_PSF",format="K",array=self.p0_PSF))
-        except:
-            pass
-        
-        col.append(fits.Column(name="Mf_per_band",format="{0}E".format(np.array(self.meb).shape[1]),array=self.meb))
-        try:
-            if len(self.true_fluxes)>0:
-                col.append(fits.Column(name="true_fluxes",format="{0}E".format(np.array(self.meb).shape[1]),array=self.true_fluxes))
-        except:
-            pass
-        
-        col.append(fits.Column(name="moments",format="5E",array=self.moment))
-        col.append(fits.Column(name="xy", format="2D", array=self.xy))
-        
-        col.append(fits.Column(name="ra",format="D",array=self.ra))
-        col.append(fits.Column(name="dec",format="D",array=self.dec))
-        
-        PSF_moments = np.vstack([np.array(self.psf_Mf),np.array(self.psf_Mr),np.array(self.psf_M1),np.array(self.psf_M2)]).T
-        col.append(fits.Column(name="psf_moments",format="4E",array=PSF_moments))
 
-        try:
-            if len(self.band1)>0:
-                col.append(fits.Column(name="w_i",format="D",array=self.band1))
-                col.append(fits.Column(name="w_r",format="D",array=self.band2))
-                col.append(fits.Column(name="w_z",format="D",array=self.band3))
-        except:
-            pass
-        try:
-            l = np.array(self.meb).shape[1]
-            col.append(fits.Column(name="cov_Mf_per_band",format="{0}E".format(l),array=np.array(self.cov_even_per_band)))
-        except:
-            pass
-        
-        
-       # try:
-        l = np.array(self.orig_row).shape[1]
-        col.append(fits.Column(name="DESDM_coadd_x",format="E",array=np.array(self.DESDM_coadd_x)[:,0]))
-        col.append(fits.Column(name="DESDM_coadd_y",format="E",array=np.array(self.DESDM_coadd_y)[:,0]))
-        col.append(fits.Column(name="orig_col",format="{0}E".format(l),array=np.array(self.orig_col)))
-        col.append(fits.Column(name="orig_row",format="{0}E".format(l),array=np.array(self.orig_row)))
-        col.append(fits.Column(name="ccd_number",format="{0}K".format(l),array=np.array(self.ccd_name)))
-        #except:
-       #     pass
+
+
+def collapse(path, name_):
+    # Function to collapse data from multiple files into a single FITS file.
+    # This is mostly used to collapse templates files together after measuring their moments in chunks.
     
-        #print (np.array(self.DESDM_coadd_x)[0,:])
-        #print (np.array(self.DESDM_coadd_y).shape)
-        #print (np.array(self.orig_col).shape)
-        #print (np.array(self.orig_row).shape)
-        #print (np.array(self.ccd_name).shape)
-      
-
-                                        
-                                        
-        
-        try:
-            if len(self.photoz)>0:
-                col.append(fits.Column(name="des_id",format="D",array=self.des_id))
-                col.append(fits.Column(name="photoz",format="D",array=self.photoz))
-        except:
-            pass
-
-        #try:
-        col.append(fits.Column(name="bkg",format="D",array=self.bkg))
-        #except:
-        #    pass
-        try:
-            col.append(fits.Column(name="lenv",format="L",array=(self.len_v).astype(np.int)))
-        except:
-            pass
-        if len(self.num_exp) == len(self.id):
-            col.append(fits.Column(name="num_exp",format="K",array=self.num_exp))
-        col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
+    # Append the 'name_' value to the 'path'
+    path = path + name_
     
-        if config['setup_image_sims']:
-            self.prihdu.header['STAMPS'] = 1  # Update value
-            col.append(fits.Column(name="AREA",format="K",array=np.zeros(len(self.id))))
-        
-        else:
-            self.prihdu.header['STAMPS'] = 0
-            col.append(fits.Column(name="AREA",format="K",array=self.AREA))
-            
-
-
-
-        cols=fits.ColDefs(col)
-        tbhdu = fits.BinTableHDU.from_columns(cols)
-        thdulist = fits.HDUList([self.prihdu,tbhdu])
-        thdulist.writeto(fitsname,overwrite=True)
-        return
-
-
-# cllpase
-
-def collapse(path,uuu):
-    path = path+uuu
-    files = glob.glob(path+'*')
+    # Get a list of files in the specified path
+    files = glob.glob(path + '*')
+    
+    # Iterate over the files
     for ii in frogress.bar(range(len(files))):
+        # Get the current file
         file_ = files[ii]
+        
         try:
+            # Try to open the file using the FITS module
             mute = fits.open(file_)
         except:
+            # If an exception occurs, move to the next file
             pass
-        if ii ==0:
-            mf  = mute[1].data['moments'][:,0]
+        
+        if ii == 0:
+            # If it is the first file, initialize the 'mf' (moment flux) array with the moments data
+            mf = mute[1].data['moments'][:, 0]
         else:
-            mf = np.hstack([mf,mute[1].data['moments'][:,0]])
+            # If it is not the first file, horizontally stack the moments data to 'mf'
+            mf = np.hstack([mf, mute[1].data['moments'][:, 0]])
 
+    # Create a new FITS HDU list with a primary HDU
     hdulist = fits.HDUList([fits.PrimaryHDU()])
-    cols = []        
-    cols.append(fits.Column(name="notes",format="K",array=0*np.ones_like(mf)))#noisetier[mask]*np.ones_like(noisetier[mask])))
+    cols = []
+    
+    # Append a new column named "notes" with the appropriate format and array to 'cols'
+    cols.append(fits.Column(name="notes", format="K", array=0*np.ones_like(mf)))
     new_cols = fits.ColDefs(cols)
+    
+    # Create a new binary table HDU from the existing columns and add it to the HDU list
     hdu = fits.BinTableHDU.from_columns(mute[1].columns + new_cols)
-    for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
+    
+    # Copy header keys related to weightN and weightSigma from the first file to the new HDU's header
+    for key in (hdrkeys['weightN'], hdrkeys['weightSigma']):
         hdu.header[key] = mute[0].header[key]
+    
     for cname in mute[1].columns.names:
         sofar = 0
         for ii, file_ in enumerate(files):
             mute = fits.open(file_)
-            nn = len(mute[1].data['moments'][:,0])
+            nn = len(mute[1].data['moments'][:, 0])
+            # Copy the data from each file to the new HDU's corresponding column
             hdu.data[cname][sofar:sofar+nn] = mute[1].data[cname]
-            sofar += nn  
+            sofar += nn
 
-
-
-
-    for key in (hdrkeys['weightN'],hdrkeys['weightSigma']):
+    # Copy header keys related to weightN and weightSigma from the first file to the primary HDU's header
+    for key in (hdrkeys['weightN'], hdrkeys['weightSigma']):
         hdulist[0].header[key] = mute[0].header[key]
+    
+    # Copy the 'STAMPS' key from the first file's header to the primary HDU's header
     hdulist[0].header['STAMPS'] = mute[0].header['STAMPS']
+    
+    # Append the new HDU to the HDU list and delete the HDU to free memory
     hdulist.append(hdu)
     del hdu
 
+    # Remove the files that have been collapsed
     for file_ in files:
         try:
             os.remove(file_)
@@ -170,15 +81,17 @@ def collapse(path,uuu):
             pass
 
     try:
-        hdulist.writeto(path+'.fits')
+        # Try to write the HDU list to a FITS file with the specified path
+        hdulist.writeto(path + '.fits')
     except:
         try:
             hdulist.writeto(path+'.fits',clobber = True)# 
         except:
             pass
-        
-    # try with the templates as well ----
+
     
+    '''
+    The next bit is not supported - it collapses high SN  targets that were saved to be used as templates.
     files = glob.glob(path.split('targets/')[0]+'/targets/high_SN_templates_chunk_*{0}*'.format(uuu))
     if len(files)>0:
         save__ = dict()
@@ -199,6 +112,115 @@ def collapse(path,uuu):
             gc.collect()
             os.remove(file)
         save_obj(path.split('targets/')[0]+'/targets/high_SN_templates_{0}'.format(uuu),save__)
+    '''
     
+def load_obj(name):
+    # Function to load an object from a file using pickle module
+    try:
+        # Try to open the file with the given name and '.pkl' extension in read binary mode
+        with open(name + '.pkl', 'rb') as f:
+            # Use pickle.load() to deserialize and load the object from the file 'f'
+            # Return the loaded object
+            return pickle.load(f)
+    except:
+        # If an exception occurs (possibly due to encoding issues), try loading the object with 'latin1' encoding
+        with open(name + '.pkl', 'rb') as f:
+            # Use pickle.load() with 'latin1' encoding to deserialize and load the object from the file 'f'
+            # Return the loaded object
+            return pickle.load(f, encoding='latin1')
+
+
+
+
+def save_moments_targets(self,fitsname,config):
+        '''
+        modified save function for moments with different sigma_Mf entries
+        '''
+        
+        # The code will save different columns into a fits file depending on they exist.
+
+        col=[]
+        col.append(fits.Column(name="id",format="K",array=self.id))
+        col.append(fits.Column(name="moments",format="5E",array=self.moment))
+        col.append(fits.Column(name="Mf_per_band",format="{0}E".format(np.array(self.meb).shape[1]),array=self.meb))
+        col.append(fits.Column(name="xy", format="2D", array=self.xy))    
+        col.append(fits.Column(name="ra",format="D",array=self.ra))
+        col.append(fits.Column(name="dec",format="D",array=self.dec))
+        PSF_moments = np.vstack([np.array(self.psf_Mf),np.array(self.psf_Mr),np.array(self.psf_M1),np.array(self.psf_M2)]).T
+        col.append(fits.Column(name="psf_moments",format="4E",array=PSF_moments))
+        l = np.array(self.orig_row).shape[1]
+        col.append(fits.Column(name="DESDM_coadd_x",format="E",array=np.array(self.DESDM_coadd_x)[:,0]))
+        col.append(fits.Column(name="DESDM_coadd_y",format="E",array=np.array(self.DESDM_coadd_y)[:,0]))
+        col.append(fits.Column(name="orig_col",format="{0}E".format(l),array=np.array(self.orig_col)))
+        col.append(fits.Column(name="orig_row",format="{0}E".format(l),array=np.array(self.orig_row)))
+        col.append(fits.Column(name="ccd_number",format="{0}K".format(l),array=np.array(self.ccd_name)))
+        col.append(fits.Column(name="bkg",format="D",array=self.bkg))
+             
+        try:
+            if len(self.p0)>0:
+                col.append(fits.Column(name="id_simulated_gal",format="K",array=self.p0))
+                col.append(fits.Column(name="id_simulated_PSF",format="K",array=self.p0_PSF))
+        except:
+            pass
+        
+        try:
+            if len(self.true_fluxes)>0:
+                col.append(fits.Column(name="true_fluxes",format="{0}E".format(np.array(self.meb).shape[1]),array=self.true_fluxes))
+        except:
+            pass
+
+        try:
+            if len(self.band1)>0:
+                col.append(fits.Column(name="w_i",format="D",array=self.band1))
+                col.append(fits.Column(name="w_r",format="D",array=self.band2))
+                col.append(fits.Column(name="w_z",format="D",array=self.band3))
+        except:
+            pass
+        try:
+            l = np.array(self.meb).shape[1]
+            col.append(fits.Column(name="cov_Mf_per_band",format="{0}E".format(l),array=np.array(self.cov_even_per_band)))
+        except:
+            pass
+        
+                                              
+        try:
+            if len(self.photoz)>0:
+                col.append(fits.Column(name="des_id",format="D",array=self.des_id))
+                col.append(fits.Column(name="photoz",format="D",array=self.photoz))
+        except:
+            pass
+        try:
+            col.append(fits.Column(name="lenv",format="L",array=(self.len_v).astype(np.int)))
+        except:
+            pass
+        if len(self.num_exp) == len(self.id):
+            col.append(fits.Column(name="num_exp",format="K",array=self.num_exp))
+        col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
     
-  
+        if config['setup_image_sims']:
+            self.prihdu.header['STAMPS'] = 1  
+            col.append(fits.Column(name="AREA",format="K",array=np.zeros(len(self.id))))
+        
+        else:
+            self.prihdu.header['STAMPS'] = 0
+            col.append(fits.Column(name="AREA",format="K",array=self.AREA))
+            
+
+        # save to a fits file
+        cols=fits.ColDefs(col)
+        tbhdu = fits.BinTableHDU.from_columns(cols)
+        thdulist = fits.HDUList([self.prihdu,tbhdu])
+        thdulist.writeto(fitsname,overwrite=True)
+
+        return
+
+def save_obj(name, obj):
+    # Function to save an object to a file using pickle module
+    # Open a file with the given name and '.pkl' extension in write binary mode
+    with open(name + '.pkl', 'wb') as f:
+        # Use pickle.dump() to serialize and save the 'obj' to the file 'f'
+        # Protocol 3 is used for Python 3.x compatibility
+        pickle.dump(obj, f, protocol=3)
+
+
+
