@@ -1,9 +1,11 @@
 # BFD_pipeline
-DES Y6 BFD pipeline
 
-recently tested with 
-python 3.6.3
+This pipeline allows one to run the Bayesian Fourier Domain code on DES Y6 data and/or simulated data.
+
+
+
 # install (use pip install . when possible)
+recently tested with python 3.6.3
 - pandas (1.1.5)
 - pyfits (3.5)
 - matplotlib (3.3.49)
@@ -27,13 +29,25 @@ python 3.6.3
 - pytest
 - pyyaml (5.4.1)
 
-# cpp part:
+For the cpp part, needed only for the Bayesian integration (and not the computation of moments):
 module swap PrgEnv-Intel (on nersc!)
 
 
+# How to run the code
+The code can be run by using a particular configuration file, specifying the steps of the pipeline, as follows:
+./run_bfd.py --config config/config_data.yaml.
+The following config files allows one to simulate galaxies and measure their shears through using the BFD code:
+
+- config_tile.yaml
+- config_tile_1gal.yaml
+- config_tile_blends.yaml
+- config_tile_stamps.yaml
+
+As for data, an example run is described in 
+
+- config_data.yaml
 
 
-# Example run
  x DESDM folks: in order to process meds files for the des y6 targets, do
 The config file needs to include the path to the meds files & shredder files.
 
