@@ -1,15 +1,17 @@
 import meds
 import psfex
 import bfd
+from bfd.keywords import *
+from bfd import TierCollection
+from bfd import Moment
 from bfd import momentcalc as mc
 from bfd.momenttable import TemplateTable, TargetTable
 from .read_meds_utils import Image, MOF_table, DetectionsTable,save_targets
-from .utilities import save_obj, load_obj
+from .utilities import save_obj, load_obj, bulkUnpack, rotate, angle, produce_sn, produce_cov, produce_mf
 import glob
 import numpy as np
 import pandas as pd
 import astropy.io.fits as fits
-from matplotlib import pyplot as plt
 import ngmix.gmix as gmix
 import ngmix           
 import timeit
@@ -18,77 +20,23 @@ import os
 import argparse
 import gc
 import math
-import time, sys
+import time
 import multiprocessing
 from functools import partial
 import sys      
 import copy
 from astropy import version 
-import astropy.io.fits as fits
 import frogress
-from bfd.keywords import *
-from bfd import TierCollection
-import numpy as np
-from bfd import Moment
 from .createTiers import createTiers
 
 
 
 '''
-make a code that assembles everything, then it must call the create_tiers from Gary.
-
-
-python createTiers.py X.fits --snMin --snMax  --fluxMin --fluxMax
-
+This
 '''
 
 
-def bulkUnpack(packed):
-        '''Convert an Nx15 packed 1d version of even matrix into Nx5x5 array'''
-        m = Moment()
-        out = np.zeros( (packed.shape[0],m.NE,m.NE), dtype=float)
-        
-        j=0
-        for i in range(m.NE):
-            nvals = m.NE - i
-            out[:,i,i:] = packed[:,j:j+nvals]
-            out[:,i:,i] = packed[:,j:j+nvals]
-            j += nvals
-            
-        odd = np.zeros( (packed.shape[0],m.NO, m.NO), dtype=float)
-        odd[:,m.MX, m.MX] = 0.5*(out[:,m.M0,m.MR]+out[:,m.M0,m.M1])
-        odd[:,m.MY, m.MY] = 0.5*(out[:,m.M0,m.MR]-out[:,m.M0,m.M1])
-        odd[:,m.MX, m.MY] =  0.5*out[:,m.M0,m.M2]
-        odd[:,m.MY, m.MX] =  0.5*out[:,m.M0,m.M2]
-            
-            
-        return out,odd
-    
-def rotate(e,o,phi):
-    '''Return Moment instance for this object rotated by angle phi radians
-    '''
-    e = copy.deepcopy(e)
-    o = copy.deepcopy(o)
-    #e = np.array(self.even)
-    z = (e[2] + 1j*e[3]) * np.exp(2j*phi)
-    e[2] = z.real
-    e[3] = z.imag
-    z = (o[0] + 1j*o[1]) * np.exp(1j*phi)
-    o = np.array([z.real,z.imag])
-    
-    return e.T,o.T
 
-def angle(e):
-    return np.arctan((e[3]/e[2]))
-
-def produce_sn(t):
-    return t[1].data['moments'][:,0]/np.sqrt(t[1].data['covariance'][:,0])
-
-def produce_cov(t):
-    return (t[1].data['covariance'][:,0])
-
-def produce_mf(t):
-    return t[1].data['moments'][:,0]
 
 def make_targets(output_folder,**config):
     
