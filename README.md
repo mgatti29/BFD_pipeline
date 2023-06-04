@@ -1,6 +1,6 @@
 # BFD_pipeline
 
-This pipeline allows one to run the Bayesian Fourier Domain code on DES Y6 data and/or simulated data.
+This pipeline allows one to run the Bayesian Fourier Domain code on DES Y6 data and/or simulated data. 
 
 
 
