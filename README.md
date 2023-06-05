@@ -1,6 +1,8 @@
 # BFD_pipeline
 
-This pipeline allows one to run the Bayesian Fourier Domain code on DES Y6 data and/or simulated data. 
+This GitHub repository hosts a comprehensive codebase implementing the Bayesian Fourier Domain Method (https://arxiv.org/abs/1508.05655) for measuring weak lensing shear from a sample of galaxy stamps. The code is designed to handle both real and simulated data, offering flexibility in analyzing various datasets.
+
+The primary focus of the code is the analysis of Dark Energy Survey Year 6 (DES Y6) data, providing powerful tools to extract valuable shear measurements from the observed galaxy stamps. However, the repository also includes functionalities to generate simulated data and perform corresponding analysis, making it a versatile tool applicable to a wide range of scenarios beyond DES Y6.
 
 
 
