@@ -304,3 +304,183 @@ def save_obj(name, obj):
 
 
 
+
+
+
+
+
+
+
+
+def select_obj_w(new_DV, even, odd, radius):
+    """
+    Selects objects based on their proximity and applies weights to the selected objects.
+
+    Parameters:
+    - new_DV (numpy.ndarray): Array of object coordinates.
+    - even (numpy.ndarray): Array containing even values.
+    - odd (numpy.ndarray): Array containing odd values.
+    - radius (float): Maximum distance for object proximity.
+
+    Returns:
+    - mask (numpy.ndarray): Boolean array indicating the selected objects.
+    - w (numpy.ndarray): Array of weights for the selected objects.
+    - even_new (numpy.ndarray): Array containing updated even values after applying weights.
+    - odd_new (numpy.ndarray): Array containing updated odd values after applying weights.
+    """
+    
+    # Create copies of input arrays
+    even_new = copy.deepcopy(even)
+    odd_new = copy.deepcopy(odd)
+    
+    # Initialize mask array with True values for all objects
+    mask = np.array([True] * new_DV.shape[0])
+    
+    # Generate an array of indices for reference
+    ipx_ref = np.arange(new_DV.shape[0])
+    
+    # Initialize weights array with ones
+    w = np.ones((new_DV.shape[0]))
+    
+    r = len(mask[mask])  # Initial count of selected objects
+    redoit = True  # Flag to control loop iterations
+    iter_ = 0  # Iteration counter
+    
+    # Loop to remove objects that are too close to each other
+    while redoit:
+        iter_ += 1
+        mask_w_dummy = copy.deepcopy(mask)
+        
+        # Create a KDTree using the selected objects
+        YourTreeName = scipy.spatial.cKDTree(new_DV[mask_w_dummy], leafsize=100)
+        
+        # Find the indices and distances of the nearest neighbors for each selected object
+        d, ipx__ = YourTreeName.query(new_DV[mask_w_dummy], k=2, distance_upper_bound=radius)
+        
+        # Sort the indices to maintain consistency
+        ipx_ = np.sort(ipx__, axis=1)
+        
+        a = np.zeros((ipx_ref.shape[0]))  # Array to track merged objects
+        
+        # Identify objects that are too close to each other and merge them
+        u_ = (ipx_[ipx_[:, 1] < len(mask[mask_w_dummy])])
+        ipx_ref_ = ipx_ref[mask_w_dummy]
+        for ii in frogress.bar(range(len(u_))):
+            ipx = u_[ii]
+            if (a[ipx_ref_[ipx[0]]] == 0) and (a[ipx_ref_[ipx[1]]] == 0): 
+                mask[ipx_ref_[ipx[1]]] = False  # Mark the second object for removal
+                w[ipx[0]] += w[ipx[1]]  # Update the weight of the first object
+                
+                # Update even and odd values by adding the corresponding values of the second object
+                even_new[ipx[0], :] += even[ipx[1], :]
+                odd_new[ipx[0], :] += odd[ipx[1], :]
+                
+                w[ipx[1]] = 0  # Set the weight of the second object to zero
+                a[ipx_ref_[ipx[0]]] = 1  # Mark the first object as merged
+                a[ipx_ref_[ipx[1]]] = 1  # Mark the second object as merged
+
+        if r == len(mask[mask]):
+            redoit = False  # Exit loop if no further objects were removed
+        r = len(mask[mask])  # Update the count of selected objects
+   
+    # Normalize the even and odd values by dividing them with their respective weights
+    for i in range(len(w)):
+        even_new[i, :] /= w[i]
+        odd_new[i, :] /= w[i]
+
+    # Check if there are any excess objects that need to be put back
+    ipx_ref_ = ipx_ref[~mask_w_dummy]
+    add_ = new_DV[~mask_w_dummy, :]
+    removed_excess = 0
+    base = len(new_DV[mask, 0])  # Initial count of selected objects
+    for i in frogress.bar(range(add_.shape[0])):
+        if len(new_DV[mask, 0]) != base:
+            base = len(new_DV[mask, 0])
+            YourTreeName = scipy.spatial.cKDTree(new_DV[mask], leafsize=100) 
+        d, ipx_ = YourTreeName.query(add_[i].reshape(1, -1), k=1, distance_upper_bound=3 * radius)
+        
+        if d > radius:
+            removed_excess += 1
+
+    print('\n removed excess:', removed_excess)  # Print the count of removed excess objects
+    
+    return mask, w, even_new, odd_new
+
+def select_obj_w_special(new_DV, w, info, radius):
+    """
+    Selects objects based on their proximity and applies weighted averaging to the selected objects.
+
+    Parameters:
+    - new_DV (numpy.ndarray): Array of object coordinates.
+    - w (numpy.ndarray): Array of weights for the objects.
+    - info (numpy.ndarray): Array containing information for the objects.
+    - radius (float): Maximum distance for object proximity.
+
+    Returns:
+    - mask (numpy.ndarray): Boolean array indicating the selected objects.
+    - w (numpy.ndarray): Array of weights for the selected objects.
+    - info (numpy.ndarray): Array containing updated information after applying weighted averaging.
+    """
+    
+    # Create a deep copy of the info array
+    info = copy.deepcopy(info)
+    print('select_obj_w_special')
+    
+    # Initialize mask array with True values for all objects
+    mask = np.array([True] * new_DV.shape[0])
+    
+    # Generate an array of indices for reference
+    ipx_ref = np.arange(new_DV.shape[0])
+    
+    r = len(mask[mask])  # Initial count of selected objects
+    redoit = True  # Flag to control loop iterations
+    iter_ = 0  # Iteration counter
+    
+    # Loop to remove objects that are too close to each other
+    while redoit:
+        print(iter_)
+        iter_ += 1
+        mask_w_dummy = copy.deepcopy(mask)
+        
+        # Create a KDTree using the selected objects
+        YourTreeName = scipy.spatial.cKDTree(new_DV[mask_w_dummy], leafsize=15)
+        
+        # Find the indices and distances of the nearest neighbors for each selected object
+        d, ipx__ = YourTreeName.query(new_DV[mask_w_dummy], k=2, distance_upper_bound=radius)
+        
+        # Sort the indices to maintain consistency
+        ipx_ = np.sort(ipx__, axis=1)
+        
+        a = np.zeros((ipx_ref.shape[0]))  # Array to track merged objects
+        
+        # Identify objects that are too close to each other and merge them
+        u_ = (ipx_[ipx_[:, 1] < len(mask[mask_w_dummy])])
+        ipx_ref_ = ipx_ref[mask_w_dummy]
+        for ii in frogress.bar(range(len(u_))):
+            ipx = u_[ii]
+            if (a[ipx_ref_[ipx[0]]] == 0) and (a[ipx_ref_[ipx[1]]] == 0):
+                if (w[ipx[1]] + w[ipx[0]]) != 0:
+                    mask[ipx_ref_[ipx[1]]] = False  # Mark the second object for removal
+                    
+                    # Update the info array by applying weighted averaging
+                    info[ipx[0], :] = (w[ipx[1]] * info[ipx[1], :] + w[ipx[0]] * info[ipx[0], :]) / (w[ipx[1]] + w[ipx[0]])
+                    
+                    w[ipx[0]] += w[ipx[1]]  # Update the weight of the first object
+                    w[ipx[1]] = 0  # Set the weight of the second object to zero
+                    a[ipx_ref_[ipx[0]]] = 1  # Mark the first object as merged
+                    a[ipx_ref_[ipx[1]]] = 1  # Mark the second object as merged
+
+        if r == len(mask[mask]):
+            redoit = False  # Exit the loop if no objects were removed in the current iteration
+        if len(u_) < 1000000:
+            redoit = False  # Exit the loop if the number of potential merges is below a threshold
+        r = len(mask[mask])  # Update the count of selected objects
+   
+    # Check for excess objects that were removed and put them back if necessary
+    ipx_ref_ = ipx_ref[~mask_w_dummy]
+    add_ = new_DV[~mask_w_dummy, :]
+    removed_excess = 0
+
+    return mask, w, info
+
+
