@@ -1,6 +1,4 @@
 import numpy as np
-
-
 import os
 import frogress
 import copy
@@ -14,19 +12,42 @@ from bfd.keywords import *
 
 
 
-def f_(uu,output_folder,noise_tiers,path_cpp):
-    os.system('cp {0}/noisetiers.fits {0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[uu]))
-    str_ = '{2}tierSelection {0}/noisetiers_{1}.fits {0}/templates_NOISETIER_{1}.fits'.format(output_folder,noise_tiers[uu],path_cpp)
-   # print (str_)
-    os.system(str_)      
+def f_(uu, output_folder, noise_tiers, path_cpp):
+    """
+    used to generate the selection function on a given noisetier
+
+    Parameters:
+    - uu (int): noisetier index
+    - output_folder (str): Path to the output folder where files will be copied and generated.
+    - noise_tiers (dict): Dictionary containing noise tier information.
+    - path_cpp (str): Path to the CPP (C++) executable.
+
+    Returns:
+    None
+
+    """
+    os.system('cp {0}/noisetiers.fits {0}/noisetiers_{1}.fits'.format(output_folder, noise_tiers[uu]))
+    str_ = '{2}tierSelection {0}/noisetiers_{1}.fits {0}/templates_NOISETIER_{1}.fits'.format(output_folder, noise_tiers[uu], path_cpp)
+    os.system(str_)
 
 
-def find_close_neighbours(target_list,template_list):
+def find_close_neighbours(target_list, template_list):
+    """
+    Finds close neighbors based on a target list and a template list.
+
+    Parameters:
+    - target_list (str): The target list.
+    - template_list (list): A list of strings representing the template list.
+
+    Returns:
+    - list_ (list): A list of strings containing the close neighbors from the template list.
+
+    """
     list_ = []
     for tu in template_list:
         try:
-            distance = (np.sum((np.array([float(i) for i in tu.split('_')])-np.array([float(i) for i in target_list.split('_')]))**2))
-            if distance <=1:
+            distance = np.sum((np.array([float(i) for i in tu.split('_')]) - np.array([float(i) for i in target_list.split('_')])) ** 2)
+            if distance <= 1:
                 list_.append(tu)
         except:
             pass
@@ -37,31 +58,46 @@ def find_close_neighbours(target_list,template_list):
 
 
 def cpp_part(output_folder,**config):
+    """
+    Performs Bayesian integration as part of a pipeline with multiple stages.
+
+    Pipeline stages:
+    - selection: Computes the selection for every noise tier.
+    - selection_ave: Selects targets that pass the selection cut and assigns (de-)selection probability to the rest.
+    - split: Splits the targets into smaller chunks for faster Bayesian integration.
+    - integration: Performs the Bayesian integration.
+    - assemble: Reassembles targets after the integration.
+
+    Returns:
+    None
+
+    """
+
     config['output_folder'] = output_folder
     path_cpp = config['path_cpp']
-    
-    try:
-        config['nSample']
-    except:
-        config['nSample'] = 30000
-    try:
-    
-        config['medium_SN']
-        config['noise_factor']
-    except:
-        config['medium_SN'] = 45 
-        config['noise_factor'] =   3
-        
-    
     medium_SN = config['medium_SN']
     noise_factor = config['noise_factor']
     
+    # checks for a number of keywords in the config files
+    try:
+        config['nSample']
+    except:
+        print ('nSample keyword not provided. Set to 30000 (default)')
+        config['nSample'] = 30000
+    try:
+        config['medium_SN']
+        config['noise_factor']
+    except:
+        print ('medium_SN keyword not provided. Set to 45 (default)')
+        print ('noise_factor keyword not provided. Set to 3 (default)')
+        config['medium_SN'] = 45 
+        config['noise_factor'] =   3
     try:
         config['selection_external_file']
     except:
+         print ('selection_external_file keyword not provided. Set to False (default)')
          config['selection_external_file'] = False
-                      
-                            
+                                             
     if config['MPI']:
         from mpi4py import MPI 
     try: 
@@ -69,41 +105,44 @@ def cpp_part(output_folder,**config):
     except:
         add_labels = ['','ISp_','ISm_']
         
-        
     for stage in config['stage']:
+        # Iterate over each stage defined in the configuration
         todos = [stage]
-        for add_i,add in enumerate(add_labels):
-            #try:
-                # now,must divide by chn
+        for add_i, add in enumerate(add_labels):
+            # Iterate over additional labels
             path_templates = config['output_folder']
             target = path_templates+'/{0}targets_sample_g.fits'.format(add)
             if os.path.exists(target):
+                # Check if the target file exists
                 targets = fits.open(target)
-                #print (target)
+                # Open the target file
                 try:
                     noise_tiers = np.array(config['noise_tiers'])
                 except:
                     noise_tiers = np.unique(targets[1].data['NOISETIER'])
                     noise_tiers = noise_tiers[noise_tiers!=-1]
-                # print (noise_tiers)
+                # Try to get noise tiers from the configuration, 
+                # otherwise extract them from the target file
 
                 if 'selection' in todos:
-                    
+                    # Perform actions specific to the 'selection' stage
                     if config['MPI']:
-                        
+                        # Check if MPI (Message Passing Interface) is enabled
                         chunks = len(noise_tiers)
                         run_count = 0
                         # print (chunks)
                         while run_count<chunks: #chunks:
+                            # Loop over the noise tiers
                             comm = MPI.COMM_WORLD
                             if run_count+comm.rank<chunks:#len(noise_tiers):
-
+                                # Check if the current process rank is within the valid range
                                 _ = f_(run_count+comm.rank,output_folder=output_folder,noise_tiers=noise_tiers,path_cpp=path_cpp)
-                            
+                                # Call the 'f_' function with the appropriate parameters
+
                             run_count+=comm.size
                             comm.bcast(run_count,root = 0)
                             comm.Barrier() 
-                            
+                            # Update the run_count, broadcast it to other processes, and synchronize
                             
                         '''
                         chunks = len(noise_tiers)-24
@@ -145,69 +184,59 @@ def cpp_part(output_folder,**config):
                         
                         
 
+               
                 if 'selection_ave' in todos:
-        
-                        
+                    # Perform actions specific to the 'selection_ave' stage
+
                     run_count = 0
 
                     #'''
                     comm = MPI.COMM_WORLD
-                    if comm.rank==0:
+                    if comm.rank == 0:
+                        # Only executed by the process with rank 0
                         m = fits.open('{0}/noisetiers.fits'.format(output_folder))
-                        noise_tiers = np.arange(0,len(noise_tiers))
+                        noise_tiers = np.arange(0, len(noise_tiers))
                         for i_ in range(len(noise_tiers)):
-                            mx = fits.open('{0}/noisetiers_{1}.fits'.format(output_folder,noise_tiers[i_]))
-                            # try:
-                            m[i_+1] = mx[i_+1].copy()
-                            # except:
-                            #     m.append(mx[i_+1])
-                                
-                                
+                            mx = fits.open('{0}/noisetiers_{1}.fits'.format(output_folder, noise_tiers[i_]))
+                            m[i_ + 1] = mx[i_ + 1].copy()
 
                         prihdu = fits.PrimaryHDU()
                         u = fits.HDUList([fits.PrimaryHDU()])
-                        for i in range(len(m)-1):
-                            u_ = fits.BinTableHDU.from_columns(m[i+1].columns,header=m[i+1].header)
-#                             keys_ = ['TIER_NUM','EXTNAME','COVMXMX','COVMXMY','COVMYMY','SIG_XY','SIG_FLUX','STARTA00','STEPA00','INDEXA00','STARTA01','STEPA01','INDEXA01','MONO_1_0','MONO_1_1','MONO_2_0','MONO_2_1','MONO_3_0','MONO_3_1','ELLIP_1','ELLIP_2','FLUX_MIN','FLUX_MAX','WT_N','WT_SIGMA']
+                        for i in range(len(m) - 1):
+                            u_ = fits.BinTableHDU.from_columns(m[i + 1].columns, header=m[i + 1].header)
 
-#                             for k in keys_:
-#                                 try:
-#                                     u_.header[k] = mx[i+1].header[k]
-#                                 except:
-                                    # pass
-        
                             u.append(u_)
-                        u.writeto(output_folder+'/noisetiers.fits',overwrite = True)# 
-                            
-                    comm.bcast(run_count,root = 0)
-                    comm.Barrier() 
+                        u.writeto(output_folder + '/noisetiers.fits', overwrite=True)
+
+                    comm.bcast(run_count, root=0)
+                    comm.Barrier()
                     #'''
+
                     run_count = 0
 
                     import time
                     time.sleep(5)
 
-
                     comm = MPI.COMM_WORLD
-                    if comm.rank==0:
-                        print ('re-assembly everything')
-                                    
+                    if comm.rank == 0:
+                        print('re-assembly everything')
+
                         if config['selection_external_file']:
                             targetfile = config['selection_external_file']
                         else:
-                            targetfile = output_folder+'/{0}targets_sample_g.fits'.format(add,run_count+comm.rank)
-                        noistierfile = output_folder+'noisetiers.fits'
-                        str_ = 'python BFD_pipeline/assignSelection.py {0} {1}'.format(noistierfile,targetfile)
+                            targetfile = output_folder + '/{0}targets_sample_g.fits'.format(add, run_count + comm.rank)
+                        noistierfile = output_folder + 'noisetiers.fits'
+                        str_ = 'python BFD_pipeline/assignSelection.py {0} {1}'.format(noistierfile, targetfile)
                         os.system(str_)
-                    comm.bcast(run_count,root = 0)
-                    comm.Barrier() 
-                
-                
+
+                    comm.bcast(run_count, root=0)
+                    comm.Barrier()                
                 
                 
                 if 'split' in todos:
                     
                     '''
+                    Perform actions specific to the 'split' stage
                     option 1)
                     default. splitted targets into chunks, and everything analyse din noisetiers
                     option 2)
@@ -486,8 +515,15 @@ def cpp_part(output_folder,**config):
                 if 'integrate' in todos:
                     print ('integrate *************')
                 
-                
-
+                    '''
+                    Perform actions specific to the 'integration' stage
+                    option 1)
+                    default. splitted targets into chunks, and everything analysed in noisetiers
+                    option 2)
+                    split targtes into noisetiers
+                    option 3)
+                    split targtes into noisetiers + templates chunk splitting.
+                    '''
                     run_count = 0
                     runs_to_do = dict()
 
