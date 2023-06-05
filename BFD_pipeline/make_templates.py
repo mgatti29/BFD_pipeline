@@ -1,49 +1,67 @@
-import meds
-import psfex
+Copy code
+import astropy.io.fits as fits
+import astropy.version
 import bfd
-from bfd import momentcalc as mc
+import bfd.momentcalc as mc
 from bfd.momenttable import TemplateTable
-from .read_meds_utils import Image, MOF_table, DetectionsTable, save_template
-from .utilities import  save_obj, load_obj
+from bfd import TierCollection, Moment
+import copy
+import frogress
+import gc
 import glob
+import h5py as h5
+import math
+import meds
+import multiprocessing
+import ngmix.gmix as gmix
 import numpy as np
 import pandas as pd
-import astropy.io.fits as fits
-from matplotlib import pyplot as plt
-import ngmix.gmix as gmix            
-import timeit
-import pickle
-import time
-import glob
-import argparse
-import os
-import multiprocessing
-from functools import partial
-from astropy import version 
-import gc
-import astropy.io.fits as fits
+import psfex
+import scipy
 import sys
 import time
 import timeit
+from functools import partial
+
+from .read_meds_utils import Image, MOF_table, DetectionsTable, save_template
+from .utilities import save_obj, load_obj, select_obj_w, select_obj_w_special, bulkUnpack, rotate, angle
+
+import argparse
 import copy
-import frogress
-import scipy
-import h5py as h5
-import copy
+import os
+import pickle
+import timeit
+import glob
 import numpy as np
-from bfd import TierCollection
-import numpy as np
-from bfd import Moment
-import gc
 import pandas as pd
-import math
-import multiprocessing
-from functools import partial   
 
+def read_files_quick(ii,deep_files):
+   """
+    Extracts specific information from the given file and returns the extracted data in arrays.
 
+    Parameters:
+    - ii (int): Index of the file to process.
+    - deep_files (list): List of file names.
 
-def dd_(ii,deep_files):
-
+    Returns:
+    - ra (list): List of RA values.
+    - dec (list): List of Dec values.
+    - ra_DF (list): List of RA values (duplicate).
+    - dec_DF (list): List of Dec values (duplicate).
+    - MAG_I (list): List of I-band magnitude values.
+    - tilename (list): List of tilename values.
+    - p0_ (list): List of p0 values.
+    - p0_PSF_ (list): List of p0_PSF values.
+    - moments (numpy.ndarray): Array of even moments.
+    - moments_odd (numpy.ndarray): Array of odd moments.
+    - error (numpy.ndarray): Array of error values.
+    - indexu (numpy.ndarray): Array of indexu values.
+    - indexu_gal (numpy.ndarray): Array of indexu_gal values.
+    - xyshift_detectinator (numpy.ndarray): Array of xyshift_detectinator values.
+    - nblends (numpy.ndarray): Array of nblends values.
+    - dmdg (numpy.ndarray): Array of dmdg values.
+    - dmdgdg (numpy.ndarray): Array of dmdgdg values.
+    """
 
     ra = []
     dec = []
@@ -54,11 +72,9 @@ def dd_(ii,deep_files):
     p0_ = []
     p0_PSF_ = []
     
-            
     moments = [np.zeros(5)]
     moments_odd = [np.zeros(2)]
     error = [np.zeros(5)]
-    #error_odd = []
     indexu = [0]
     indexu_gal = [0]
 
@@ -74,19 +90,17 @@ def dd_(ii,deep_files):
         save_ = load_obj(df.strip('.pkl'))
         for index in (save_.keys()):
 
-            mom = save_[index]['moments'].get_moment(0.,0.)
+            mom = save_[index]['moments'].get_moment(0., 0.)
 
             moments.append(mom.even)
             moments_odd.append(mom.odd)
             error.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
-            #error_odd.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
-            indexu.append(save_[index]['index'] )
-
+            indexu.append(save_[index]['index'])
+            
             try:
                 nblends.append(save_[index]['nblends'])
                 xyshift_detectinator.append(save_[index]['xyshift_detectinator'])        
             except:
-                
                 nblends.append(1)
                 xyshift_detectinator.append(1)
     
@@ -98,15 +112,17 @@ def dd_(ii,deep_files):
                 dmdgdg.append(0)
    
             try:
-                indexu_gal.append(save_[index]['index_gal'] )
+                indexu_gal.append(save_[index]['index_gal'])
             except:
-                indexu_gal.append(save_[index]['index'] )
+                indexu_gal.append(save_[index]['index'])
+            
             try:
-                mf_per_band.append(save_[index]['mf_per_band'] )
+                mf_per_band.append(save_[index]['mf_per_band'])
             except:
                 pass
+            
             try:
-                mof_index.append(save_[index]['MOF_index'] )
+                mof_index.append(save_[index]['MOF_index'])
                 ra.append(save_[index]['ra'])
                 dec.append(save_[index]['dec'])
                 ra_DF.append(save_[index]['ra'])
@@ -115,6 +131,7 @@ def dd_(ii,deep_files):
                 tilename.append(save_[index]['tilename'])
             except:
                 pass
+            
             try:
                 p0_.append(save_[index]['p0'])
                 p0_PSF_.append(save_[index]['p0_PSF'])
@@ -122,411 +139,216 @@ def dd_(ii,deep_files):
                 pass
     except:
         pass
-    return [ra,dec,ra_DF,dec_DF,MAG_I,tilename,p0_,p0_PSF_,np.array(moments),np.array(moments_odd),np.array(error),np.array(indexu),np.array(indexu_gal), np.array(xyshift_detectinator),np.array(nblends),np.array(dmdg),np.array(dmdgdg)]
-
-        
     
+    return [
+        ra, dec, ra_DF, dec_DF, MAG_I, tilename, p0_, p0_PSF_,
+        np.array(moments), np.array(moments_odd), np.array(error),
+        np.array(indexu), np.array(indexu_gal), np.array(xyshift_detectinator),
+        np.array(nblends), np.array(dmdg), np.array(dmdgdg)
+    ]     
+
+
+
+
+def pipeline(output_folder, config, deep_files, targets_properties, runs, index):
+    """
+    Runs a pipeline to generate translated version of the templates based on the provided inputs.
+
+    Parameters:
+    - output_folder (str): Path to the output folder.
+    - config (dict): Configuration parameters.
+    - deep_files (list): List of deep files.
+    - targets_properties (dict): Dictionary of target properties.
+    - runs (list): List of runs.
+    - index (int): Index to select the run.
+
+    Returns: None
+    """
+
+    t_index, d_index = runs[index]
     
-def select_obj_w_special(new_DV,w,info,radius):
-    
-    info = copy.deepcopy(info)
-    print ('select_obj_w_special')
-    
-  
-    mask = np.array([True]*new_DV.shape[0])
-    ipx_ref = np.arange(new_DV.shape[0])
-    
+    # Check if the templates file doesn't already exist
+    if not os.path.exists(output_folder + '/templates/templates_junk/templates_{0}_{1}.pkl'.format(t_index, d_index)):
+        try:
+            templates_overview = fits.open(output_folder + '/templates_overview.fits')
+            mfverview = templates_overview[1].data['moments'][:, 0]
+            idverview = templates_overview[1].data['index_gal']
+            class_w = templates_overview[1].data['class']
+            wverview = templates_overview[1].data['w']
+            overview_data = True
+        except:
+            overview_data = False
 
-    r = len(mask[mask])
-    redoit = True
-    iter_ = 0
-    # this removes objects too close ++++++++++++
-    while redoit:
-        print (iter_)
-        iter_ += 1
-        mask_w_dummy = copy.deepcopy(mask)
-        
-        YourTreeName = scipy.spatial.cKDTree(new_DV[mask_w_dummy], leafsize=15)
-        
-        d,ipx__ = YourTreeName.query(new_DV[mask_w_dummy], k=2, distance_upper_bound=radius)
+        # Set the sigma_xy and sigma_flux values from targets_properties
+        config['sigma_xy'] = targets_properties[t_index]['sigma_xy']
+        config['sigma_flux'] = targets_properties[t_index]['sigma_flux']
 
-        ipx_ = []
-        for dd in ipx__:
-            ipx_.append(np.sort(dd))
-        ipx_ = np.array(ipx_)
-        
-        
-        a = np.zeros((ipx_ref.shape[0]))
+        # Create a TemplateTable instance with the specified configuration parameters
+        tab_templates = TemplateTable(
+            n=config['n'],
+            sigma=config['sigma'],
+            sn_min=config['sn_min'],
+            sigma_xy=config['sigma_xy'],
+            sigma_flux=config['sigma_flux'],
+            sigma_step=config['sigma_step'],
+            sigma_max=config['sigma_max'],
+            xy_max=config['xy_max']
+        )
 
-        u_ = (ipx_[ipx_[:,1]<len(mask[mask_w_dummy])])
-        
-        ipx_ref_ = ipx_ref[mask_w_dummy]
-        for ii in frogress.bar(range(len(u_))):
-            ipx = u_[ii]
-            if (a[ipx_ref_[ipx[0]]] ==0) and (a[ipx_ref_[ipx[1]]] == 0): 
-                if (w[ipx[1]]+w[ipx[0]])!=0:
-                    mask[ipx_ref_[ipx[1]]] = False
-                    # remove obj list
-                    info[ipx[0],:] = (w[ipx[1]]*info[ipx[1],:] + w[ipx[0]]*info[ipx[0],:])/(w[ipx[1]]+w[ipx[0]])
+        print('sigma_flux: ', config['sigma_flux'])
+        print('sigma_XY: ', config['sigma_xy'])
 
-                    w[ipx[0]] += w[ipx[1]]
+        # Load the templates data from the appropriate file
+        try:
+            save_ = load_obj(output_folder + '/templates/' + 'templates_' + d_index)
+        except:
+            save_ = load_obj(output_folder + '/templates/' + 'IS_templates_' + d_index)
 
+        cumulative_weight = 0
+        cumulative_weight1 = 0
+        templates = []
+        count = 0
+        count_g = 0
+        print('number of entries: ', len(save_.keys()))
 
-                    w[ipx[1]] = 0
-                    a[ipx_ref_[ipx[0]]] = 1
-                    a[ipx_ref_[ipx[1]]] = 1
+        # Downsample the templates based on the downsample_factor
+        try:
+            downsample_factor = config['downsample_factor']
+            downsample = np.int(len(save_.keys()) * downsample_factor)
+        except:
+            downsample = len(save_.keys())
+            downsample_factor = 1.
 
-        if r == len(mask[mask]):
-            redoit = False
-        if len(u_)<1000000:
-            redoit = False
-        r = len(mask[mask])
-   
+        # Iterate over the templates data and process each template
+        for i_ in frogress.bar(range(np.int(len(save_.keys()) * downsample_factor))):
+            i = list(save_.keys())[i_]
 
-    #for i in range(len(w)):
-    #    info[i,:] /= w[i]
-       
-
-
-    # sometimes, removed objects are too many. ++++++++++++
-    #print (new_DV[mask,:])
-    ipx_ref_ = ipx_ref[~mask_w_dummy]
-    add_ = new_DV[~mask_w_dummy,:]
-    removed_excess = 0
-    '''
-    base = len(new_DV[mask,0])
-    for i in frogress.bar(range(add_.shape[0])):
-        if len(new_DV[mask,0])!=base:
-            base = len(new_DV[mask,0])
-            YourTreeName = scipy.spatial.cKDTree(new_DV[mask], leafsize=100) 
-        d,ipx_ = YourTreeName.query(add_[i].reshape(1,-1), k=1, distance_upper_bound=3*radius)
-
-        #if i % 5000 == 0:
-        #    print (' removed excess: ' ,removed_excess)
-            
-        if d>radius:
-            #print ('put back: ',x[ipx_ref_[i]])
-            #print (x[ipx_ref_[i]])
-            #mask[ipx_ref_[i]] = True
-            removed_excess +=1
-
-    print ('\n  excess: ' ,removed_excess)
-    '''
-    return mask,w,info
-
-def select_obj_w(new_DV,even,odd,radius):
-    
-    even_new = copy.deepcopy(even)
-    odd_new =  copy.deepcopy(odd)
-    
-  
-    mask = np.array([True]*new_DV.shape[0])
-    ipx_ref = np.arange(new_DV.shape[0])
-    
-    w = np.ones((new_DV.shape[0]))
-    r = len(mask[mask])
-    redoit = True
-    iter_ = 0
-    # this removes objects too close ++++++++++++
-    while redoit:
-        iter_ += 1
-        mask_w_dummy = copy.deepcopy(mask)
-        
-        YourTreeName = scipy.spatial.cKDTree(new_DV[mask_w_dummy], leafsize=100)
-        
-        d,ipx__ = YourTreeName.query(new_DV[mask_w_dummy], k=2, distance_upper_bound=radius)
-
-        ipx_ = []
-        for dd in ipx__:
-            ipx_.append(np.sort(dd))
-        ipx_ = np.array(ipx_)
-        
-        
-        a = np.zeros((ipx_ref.shape[0]))
-
-        u_ = (ipx_[ipx_[:,1]<len(mask[mask_w_dummy])])
-        
-        ipx_ref_ = ipx_ref[mask_w_dummy]
-        for ii in frogress.bar(range(len(u_))):
-            ipx = u_[ii]
-            if (a[ipx_ref_[ipx[0]]] ==0) and (a[ipx_ref_[ipx[1]]] == 0): 
-                mask[ipx_ref_[ipx[1]]] = False
-                # remove obj list
-                w[ipx[0]] += w[ipx[1]]
-                
-                even_new[ipx[0],:] += even[ipx[1],:]
-                odd_new[ipx[0],:] += odd[ipx[1],:]      
-                
-                w[ipx[1]] = 0
-                a[ipx_ref_[ipx[0]]] = 1
-                a[ipx_ref_[ipx[1]]] = 1
-
-        if r == len(mask[mask]):
-            redoit = False
-        r = len(mask[mask])
-   
-
-    for i in range(len(w)):
-        even_new[i,:] /= w[i]
-        odd_new[i,:] /= w[i]
-
-
-    # sometimes, removed objects are too many. ++++++++++++
-    #print (new_DV[mask,:])
-    ipx_ref_ = ipx_ref[~mask_w_dummy]
-    add_ = new_DV[~mask_w_dummy,:]
-    removed_excess = 0
-    base = len(new_DV[mask,0])
-    for i in frogress.bar(range(add_.shape[0])):
-        if len(new_DV[mask,0])!=base:
-            base = len(new_DV[mask,0])
-            YourTreeName = scipy.spatial.cKDTree(new_DV[mask], leafsize=100) 
-        d,ipx_ = YourTreeName.query(add_[i].reshape(1,-1), k=1, distance_upper_bound=3*radius)
-
-        #if i % 5000 == 0:
-        #    print (' removed excess: ' ,removed_excess)
-            
-        if d>radius:
-            #print ('put back: ',x[ipx_ref_[i]])
-            #print (x[ipx_ref_[i]])
-            #mask[ipx_ref_[i]] = True
-            removed_excess +=1
-
-    print ('\n removed excess: ' ,removed_excess)
-    return mask,w,even_new,odd_new
-
-
-def bulkUnpack(packed):
-        '''Convert an Nx15 packed 1d version of even matrix into Nx5x5 array'''
-        m = Moment()
-        out = np.zeros( (packed.shape[0],m.NE,m.NE), dtype=float)
-        
-        j=0
-        for i in range(m.NE):
-            nvals = m.NE - i
-            out[:,i,i:] = packed[:,j:j+nvals]
-            out[:,i:,i] = packed[:,j:j+nvals]
-            j += nvals
-            
-        odd = np.zeros( (packed.shape[0],m.NO, m.NO), dtype=float)
-        odd[:,m.MX, m.MX] = 0.5*(out[:,m.M0,m.MR]+out[:,m.M0,m.M1])
-        odd[:,m.MY, m.MY] = 0.5*(out[:,m.M0,m.MR]-out[:,m.M0,m.M1])
-        odd[:,m.MX, m.MY] =  0.5*out[:,m.M0,m.M2]
-        odd[:,m.MY, m.MX] =  0.5*out[:,m.M0,m.M2]
-            
-            
-        return out,odd
-    
-def rotate(e,o,phi):
-    '''Return Moment instance for this object rotated by angle phi radians
-    '''
-    e = copy.deepcopy(e)
-    o = copy.deepcopy(o)
-    #e = np.array(self.even)
-    z = (e[2] + 1j*e[3]) * np.exp(2j*phi)
-    e[2] = z.real
-    e[3] = z.imag
-    z = (o[0] + 1j*o[1]) * np.exp(1j*phi)
-    o = np.array([z.real,z.imag])
-    
-    return e.T,o.T
-
-def angle(e):
-    return np.arctan((e[3]/e[2]))
-
-
-def pipeline(output_folder,config, deep_files, targets_properties, runs, index):
-   
-        t_index, d_index = runs[index]
-        if not os.path.exists(output_folder+'/templates/templates_junk/templates_{0}_{1}.pkl'.format(t_index,d_index)):
+            start = timeit.default_timer()
+            cc = False
 
             try:
-            #if 1==1:
-                templates_overview = fits.open(output_folder+'/templates_overview.fits')
-                mfverview = templates_overview[1].data['moments'][:,0]
-                idverview = templates_overview[1].data['index_gal']
-                class_w = templates_overview[1].data['class']
-                wverview = templates_overview[1].data['w']
-                overview_data = True
-            except:
-                overview_data = False
-                
-            #    pass
-            config['sigma_xy'] =   targets_properties[t_index]['sigma_xy']
-            config['sigma_flux'] = targets_properties[t_index]['sigma_flux']
+                # Retrieve the moments for the template
+                mom = save_[i]['moments'].get_moment(0., 0.)
 
-            tab_templates = TemplateTable(n = config['n'],
-                            sigma =  config['sigma'],
-                            sn_min = config['sn_min'], 
-                            sigma_xy = config['sigma_xy'], 
-                            sigma_flux = config['sigma_flux'], 
-                            sigma_step = config['sigma_step'], 
-                            sigma_max = config['sigma_max'],
-                            xy_max = config['xy_max'])
-
-
-
-            print ('sigma_flux: ', config['sigma_flux'])
-            print ('sigma_XY: ', config['sigma_xy'])
-
-
-            #try:
-
-            try:
-                save_ = load_obj(output_folder+'/templates/'+'templates_'+d_index)
-            except:
-                save_ = load_obj(output_folder+'/templates/'+'IS_templates_'+d_index)
-
-           # try:
-            cumulative_weight = 0
-            cumulative_weight1 = 0
-
-            templates = []
-            count = 0
-            count_g = 0
-            print ('number of entries: ', len(save_.keys()))
-
-            #for i in range(len(tab_mute.images)):
-            # downsample
-
-            try:
-
-                downsample_factor = config['downsample_factor']
-                downsample = np.int(len(save_.keys())*downsample_factor)
-            except:
-                downsample = len(save_.keys())
-                downsample_factor=1.
-
-
-            for i_ in frogress.bar(range( np.int(len(save_.keys())*downsample_factor))):
-
-                i = list(save_.keys())[i_]
-
-
-
-                start = timeit.default_timer()
-                #update_progress(1.*i/(len(tab_mute.images)),timeit.default_timer(),start)           
-                cc = False
-
-                try:
-                #if 1==1:
-                    #mom = tab_mute.images[i].moments.get_moment(0.,0.)
-                    mom = save_[i]['moments'].get_moment(0.,0.)
-
-                    if overview_data:
-                        idx = np.in1d(idverview,save_[i]['index'])
-                        if wverview[idx]>0:
-                            w_ = wverview[idx][0]
-                            cc =True
-
-                            mom.even = templates_overview[1].data['average_moments'][idx,:][0]
-                            mom.odd = templates_overview[1].data['average_moments_odd'][idx,:][0]
-                        else:
-                            cc =False
-
-
-
-                    else:
-                        mom = save_[i]['moments'].get_moment(0.,0.)
-                        w_ = 1.
+                if overview_data:
+                    # Retrieve additional data from the overview if available
+                    idx = np.in1d(idverview, save_[i]['index'])
+                    if wverview[idx] > 0:
+                        w_ = wverview[idx][0]
                         cc = True
-                except:
-                #    print ('not a valid measurement')
-                    pass
-                if cc:
-                    #print (i)
-                    #mom = tab_mute.images[i].moments.get_moment(0.,0.)
-                    #
 
-                    count_g +=1
+                        # Set even and odd moments from the overview data
+                        mom.even = templates_overview[1].data['average_moments'][idx, :][0]
+                        mom.odd = templates_overview[1].data['average_moments_odd'][idx, :][0]
+                    else:
+                        cc = False
+                else:
+                    # Set moments and weight for the template
+                    mom = save_[i]['moments'].get_moment(0., 0.)
+                    w_ = 1.
+                    cc = True
+            except:
+                pass
 
-                    Mf = mom.even[mom.M0]
-                    #print ('Mf ', Mf)
-                    SN_mute = Mf/np.sqrt(save_[i]['moments'].get_covariance()[0][mom.M0,mom.M0])
-                    mask_bool = True
+            if cc:
+                count_g += 1
 
+                Mf = mom.even[mom.M0]
+                SN_mute = Mf / np.sqrt(save_[i]['moments'].get_covariance()[0][mom.M0, mom.M0])
+                mask_bool = True
 
-                    if mask_bool:
-                            cumulative_weight1 += w_ 
-                            #print (i)
-                            #True, result, xy_kept, area_integral
-                            try:
-                                flag_p, t, xy_kept, area_integral = save_[i]['moments'].make_templates( config['sigma_xy'],sigma_flux = config['sigma_flux'], sn_min= config['sn_min'], sigma_max= config['sigma_max'],sigma_step= config['sigma_step'], xy_max= config['xy_max'])
-                            except:
-                                flag_p = False
-                                t = []
-                                
-                            ID_mute = copy.copy(save_[i]['index'])
-                            ID_gal = copy.copy(save_[i]['index'])
+                if mask_bool:
+                    cumulative_weight1 += w_
 
-                            if flag_p:
-                                if overview_data:
-                                    class_ = class_w[idx]
-                                else:
-                                    class_ = '-100_-100_-100'
+                    # Generate templates from the moments
+                    try:
+                        flag_p, t, xy_kept, area_integral = save_[i]['moments'].make_templates(
+                            config['sigma_xy'],
+                            sigma_flux=config['sigma_flux'],
+                            sn_min=config['sn_min'],
+                            sigma_max=config['sigma_max'],
+                            sigma_step=config['sigma_step'],
+                            xy_max=config['xy_max']
+                        )
+                    except:
+                        flag_p = False
+                        t = []
 
-                                gc.collect()
-                                try:
-                                    p0 = save_[i]['p0']
-                                    p0_PSF = save_[i]['p0_PSF']
+                    ID_mute = copy.copy(save_[i]['index'])
+                    ID_gal = copy.copy(save_[i]['index'])
 
-                                except:
+                    if flag_p:
+                        if overview_data:
+                            class_ = class_w[idx]
+                        else:
+                            class_ = '-100_-100_-100'
 
-                                    p0 = 0
-                                    p0_PSF = 0
+                        gc.collect()
+                        try:
+                            p0 = save_[i]['p0']
+                            p0_PSF = save_[i]['p0_PSF']
+                        except:
+                            p0 = 0
+                            p0_PSF = 0
 
-                                if len(t)>0:
-                                    if t[0] is None:
-                                        continue
-                                    else:   
-                                        for tmpl in t:
-                                            count +=1
-                                            tmpl.p0 = p0
-                                            tmpl.p0_PSF = p0_PSF
-                                            tmpl.id = ID_mute
-                                            tmpl.id_gal = ID_gal
-                                            tmpl.class_ = class_
-                                            tmpl.area_integral = area_integral
-                                            tmpl.nblends =  save_[i]['nblends']
-                                            tmpl.xyshift_detectinator =  save_[i]['xyshift_detectinator']
-                                            tmpl.xy_kept = xy_kept
-                                            tmpl.nda *= w_/downsample_factor
-                                            templates.append(tmpl)
-                                            #print ('---- w', tmpl.nda)
-                                            cumulative_weight +=  tmpl.nda
+                        if len(t) > 0:
+                            if t[0] is None:
+                                continue
+                            else:
+                                for tmpl in t:
+                                    count += 1
+                                    tmpl.p0 = p0
+                                    tmpl.p0_PSF = p0_PSF
+                                    tmpl.id = ID_mute
+                                    tmpl.id_gal = ID_gal
+                                    tmpl.class_ = class_
+                                    tmpl.area_integral = area_integral
+                                    tmpl.nblends = save_[i]['nblends']
+                                    tmpl.xyshift_detectinator = save_[i]['xyshift_detectinator']
+                                    tmpl.xy_kept = xy_kept
+                                    tmpl.nda *= w_ / downsample_factor
+                                    templates.append(tmpl)
+                                    cumulative_weight += tmpl.nda
 
-            print ('COUNT TEMPLATES ',count)
-            
-            save_obj(output_folder+'/templates/templates_junk/templates_{0}_{1}'.format(t_index,d_index),templates)
+        print('COUNT TEMPLATES ', count)
 
-            del save_
-            gc.collect()
+        # Save the generated templates to a file
+        save_obj(output_folder + '/templates/templates_junk/templates_{0}_{1}'.format(t_index, d_index), templates)
 
+        del save_
+        gc.collect()
 
         
 def make_templates(output_folder,**config):
+    
+    
     if config['MPI']:
         from mpi4py import MPI 
     print ('making templates')
     try:
         config['classes']
     except:
+        print ('number of clases not provided. Setting to 7 (default)')
         config['classes'] = 7
     try:
         config['des_y3_match']
     except:
+        print ('variable des_y3_match not provided. Setting to False (default)')
         config['des_y3_match'] = False
     try:
         config['reduce_input_files']
     except:
+        print ('variable reduce_input_files not provided. Setting to False (default)')
         config['reduce_input_files'] = False
     try:
         config['min_sn_regrouping']
     except:
+        print ('variable min_sn_regrouping not provided. Setting to 17 (default)')
         config['min_sn_regrouping'] = 17
     try:
         config['resume_templates_full']
     except:
+        print ('variable resume_templates_full not provided. Setting to False (default)')
         config['resume_templates_full'] = False
         
     if ('compute' in config['stage']) or ('assembly' in config['stage']):
@@ -619,67 +441,10 @@ def make_templates(output_folder,**config):
             #if len(deep_files)==0:
             #    deep_files = glob.glob(output_folder+'/templates/'+'/old*.pkl')
                 
-            
-        '''
-        moments = []
-        moments_odd = []
-        error = []
-        #error_odd = []
-        indexu = []
-        indexu_gal = []
-        
-        mf_per_band = []
-        
-            
-        ra = []
-        dec = []
-        ra_DF = []
-        dec_DF = []
-        MAG_I = []
-        tilename = []
-        p0_ = []
-        p0_PSF_ = []
-        for ii in frogress.bar(range(len(deep_files))):
-
-            df = deep_files[ii]
-            try:
-                save_ = load_obj(df.strip('.pkl'))
-                for index in (save_.keys()):
-
-                    mom = save_[index]['moments'].get_moment(0.,0.)
-
-                    moments.append(mom.even)
-                    moments_odd.append(mom.odd)
-                    error.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
-                    #error_odd.append(np.sqrt(save_[index]['moments'].get_covariance()[0].diagonal()))
-                    indexu.append(save_[index]['index'] )
-                    indexu_gal.append(save_[index]['index'] )
-                    try:
-                        mf_per_band.append(save_[index]['mf_per_band'] )
-                    except:
-                        pass
-                    try:
-                        mof_index.append(save_[index]['MOF_index'] )
-                        ra.append(save_[index]['ra'])
-                        dec.append(save_[index]['dec'])
-                        ra_DF.append(save_[index]['ra'])
-                        dec_DF.append(save_[index]['dec'])
-                        MAG_I.append(save_[index]['MAG_I'])
-                        tilename.append(save_[index]['tilename'])
-                    except:
-                        pass
-                    try:
-                        p0_.append(save_[index]['p0'])
-                        p0_PSF_.append(save_[index]['p0_PSF'])
-                    except:
-                        pass
-            except:
-                print (df)
-        '''
-
+           
         pool = multiprocessing.Pool(processes=6)
         xlist = np.arange(len(deep_files))
-        uu = pool.map(partial(dd_,deep_files=deep_files), xlist)
+        uu = pool.map(partial(read_files_quick,deep_files=deep_files), xlist)
 
 
         ra = []
@@ -738,6 +503,7 @@ def make_templates(output_folder,**config):
                 dmdg =  np.hstack([dmdg,uu[i][15]  ])
                 dmdgdg =  np.hstack([dmdgdg,uu[i][16]  ])
                 # print (ra.shape,xyshift_detectinator.shape,nblends.shape)
+                
         # match with des y3 catalog ----
         print ('des_y3_match ', config['des_y3_match'])
         if config['des_y3_match']:
@@ -1098,22 +864,9 @@ def make_templates(output_folder,**config):
                     except:
                         print ('failed ',path+name)  
 
-    
-    
-    
-
-    
-    
-    
-    
-    
-    
-
-    
 
     if 'compute' in config['stage']:
-        
-    
+       
         while run_count<len(runs):
             comm = MPI.COMM_WORLD
             print("Hello! I'm rank %d from %d running in total..." % (comm.rank, comm.size))
@@ -1129,6 +882,7 @@ def make_templates(output_folder,**config):
         print ('done compute')
     
     if 'assembly' in config['stage']:
+        
         run_count = 0
         print ('noisetiers ',noisetier)
         while run_count <noisetier:
@@ -1192,26 +946,11 @@ def make_templates(output_folder,**config):
                             except:
                                 print ('failed ','.'+file.strip('.pkl'))
 
-
-
-                        '''
-
-                        boia
-                        '''
-                        print ('total templates ',count)
-                        print ('done')
-
-
                         end = timeit.default_timer()
                         print ('saving NOISETIER #',t_index, ', # templates: ',(len(tab_templates.templates))   )
 
-
                         save_template(tab_templates,output_folder+'/templates_NOISETIER_{0}.fits'.format(t_index),EFFAREA,t_index)
-                        #except:
-                        #    pass
-
-
-
+                        
                 run_count+=comm.size
                 comm.bcast(run_count,root = 0)
                 comm.Barrier() 
@@ -1307,10 +1046,6 @@ def make_templates(output_folder,**config):
                         prihdu = fits.PrimaryHDU()
                         thdulist = fits.HDUList([prihdu,tbhdu])
                         thdulist.writeto(fitsname,overwrite=True)
-
-
-
-
 
 
                 run_count+=comm.size
