@@ -171,12 +171,31 @@ def half_max_x(x, y):
 
 
 
-'''
-This is a class that reads the MEDS files and saves all the relevant information needed to compute BFD moments
 
-'''
 class Image:
     
+    """
+            Represents an image in a Multi-Epoch Data Structure (MEDS).
+
+            Args:
+            index (int): The index of the image in the MEDS.
+            meds (list, optional): A list of MEDS objects containing the image data. Defaults to an empty list.
+            bands (list, optional): A list of bands associated with the image. Defaults to an empty list.
+            verbose (int, optional): Verbosity level. Defaults to 0.
+
+            Attributes:
+            index_MEDS (int): The index of the image in the MEDS.
+            image_ID (list): A list of image IDs associated with the image.
+            bands (list): A list of bands associated with the image.
+            n_bands (int): The number of bands associated with the image.
+            xyshift: Shift in x and y coordinates of the image.
+            moments: Moments of the image.
+            flags: Flags indicating properties of the image.
+            MOF_model_rendered: Rendered MOF model of the image.
+            MOF_model_all_rendered: Rendered MOF models of all images.
+            MOF_index: Index of the MOF model associated with the image.
+            verbose (int): Verbosity level.
+     """
 
     def __init__(self, index, meds = [], bands = [], verbose = 0):
 
@@ -932,10 +951,27 @@ except:
 
 class MOF_table:
     def __init__(self, path, shredder = False):
-        '''
-        Loads into memory a MOF catalog.
+        """
+        Loads and manages a catalog of Multi-Object Fitting (MOF) data.
 
-        '''
+        Args:
+            path (str): The path to the MOF catalog file.
+            shredder (bool, optional): Flag indicating whether the catalog file is in "shredder" format. 
+                                       Defaults to False.
+
+        Attributes:
+            shredder (bool): Flag indicating whether the catalog is in "shredder" format.
+            mof_catalog: The loaded MOF catalog data.
+            id_array: An array containing the IDs of the objects in the catalog.
+            params: An array containing the band parameters of the objects.
+            PSF_params: An array containing the PSF parameters of the objects.
+            PSF_size: An array containing the PSF sizes of the objects.
+            flux: An array containing the flux values of the objects.
+            numbands: The number of bands in the catalog.
+            tilename: The tilename associated with the catalog.
+            id_epoch_array: An array containing the IDs and epochs of the objects.
+        """
+
         self.shredder = shredder
 
 
@@ -1222,46 +1258,7 @@ class DetectionsTable:
                 'RA': (MOF_table.ra).byteswap().newbyteorder(),
                 'DEC': (MOF_table.dec).byteswap().newbyteorder(),
                 }
-            
-        '''
-        try:
-            try:
-                try:
-                    data_ = {'pos': index_to_match,
-                        'TILENAME': (MOF_table.tilename).byteswap().newbyteorder(),
-                        'MAG_I': (MOF_table.MAG_I).byteswap().newbyteorder(),
-                        'MAG_R': (MOF_table.MAG_R).byteswap().newbyteorder(),
-                        'MAG_Z': (MOF_table.MAG_Z).byteswap().newbyteorder(),
-                        'RA': (MOF_table.ra).byteswap().newbyteorder(),
-                        'DEC': (MOF_table.dec).byteswap().newbyteorder(),
-                        }
-                except:
-                    data_ = {'pos': index_to_match,
-                        'TILENAME': (MOF_table.tilename).byteswap().newbyteorder(),
-                        'MAG_I': (MOF_table.MAG_I),
-                        'MAG_R': (MOF_table.MAG_R),
-                        'MAG_Z': (MOF_table.MAG_Z),
-                        'RA': (MOF_table.ra).byteswap().newbyteorder(),
-                        'DEC': (MOF_table.dec).byteswap().newbyteorder(),
-                        }
-            except:
-                    data_ = {'pos': index_to_match,
-                    'TILENAME': (MOF_table.tilename).byteswap().newbyteorder(),
-                    'MAG_I': (MOF_table.MAG_I).byteswap().newbyteorder(),
-                    'RA': (MOF_table.ra).byteswap().newbyteorder(),
-                    'DEC': (MOF_table.dec).byteswap().newbyteorder(),
-                    }
-        except:
-            data_ = {'pos': index_to_match,
-                'TILENAME': (MOF_table.tilename).byteswap().newbyteorder(),
-                'MAG_I': (np.zeros(len(MOF_table.tilename))),#.byteswap().newbyteorder(),
-                'MAG_R': (np.zeros(len(MOF_table.tilename))),#.byteswap().newbyteorder(),
-                'MAG_Z': (np.zeros(len(MOF_table.tilename))),#.byteswap().newbyteorder(),
-                'RA': (MOF_table.ra).byteswap().newbyteorder(),
-                'DEC': (MOF_table.dec).byteswap().newbyteorder(),
-                }
-        
-        '''
+
         df1 = pd.DataFrame(data = data_, index = MOF_table.id_array)
         df2 = pd.DataFrame(index = self.ID_array)        
         self.pos = np.array(df2.join(df1).loc[self.ID_array,'pos'])
