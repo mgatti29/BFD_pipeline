@@ -57,3 +57,11 @@ to run:\n
 
 where DES_tiles can be a list of string, e.g: DES0137-3749, DES0137-3721
 
+
+# Contributing
+Contributions to this project are welcome! If you encounter any issues, have ideas for improvements, or would like to add new features, please submit a pull request or open an issue on the GitHub repository.
+
+# License
+This project is licensed under the MIT License. See the LICENSE file for more information.
+
+
