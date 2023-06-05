@@ -29,64 +29,28 @@ noise_interp_flags  = np.sum([4,8,128,256,512])
 bad_flags = spline_interp_flags | noise_interp_flags
 
 
-def check_mask_and_interpolate(image,bmask):
-    
-
-    
-    bmask |= np.rot90(bmask)
-    bad_mask = (bmask & bad_flags) != 0
-
-    self.images[ii].MOF_model_all_rendered
-    
-    '''
-    nbad = 0
-    if np.any(bad_mask):
-
-        nbad = bad_mask.sum()
-        #print ('')
-        #print (nbad,bad_mask.shape)
-        #print ('')
-        bad_pix, good_pix, good_im, good_ind = _get_nearby_good_pixels(image, bad_mask, nbad)
-
-        gi, ind = np.unique(good_ind, return_index=True)
-        good_pix = good_pix[ind, :]
-
-
-        good_im = good_im[ind]
-
-        try:
-            img_interp = CloughTocher2DInterpolator(
-            good_pix,
-            good_im,
-            fill_value=0.0,
-                )
-        except:
-            return image,0
-
-
-        interp_image = image.copy()
-        interp_image = image.copy()
-        interp_image[bad_mask] = img_interp(bad_pix)
-
-        if interp_image is None:
-            return image,0
-        return interp_image,nbad
-    else:
-        return image,0
-    '''
-    
-    
-        
-        
-
-   
-    
             
 class BandInfo:
+    """
+    Class representing information about a band.
+
+    Attributes:
+        weight (float): The weight assigned to the band. Default is 1.0.
+        index (int): The index of the band. Default is 0.
+    """
+
     def __init__(self, weight=1., index=0):
+        """
+        Initializes a BandInfo object.
+
+        Args:
+            weight (float, optional): The weight assigned to the band. Default is 1.0.
+            index (int, optional): The index of the band. Default is 0.
+        """
         self.weight = float(weight)
         self.index = int(index)
 
+    
 def _get_nearby_good_pixels(image, bad_msk, nbad, buff=4):
     
     """
@@ -171,15 +135,39 @@ def lin_interp(x, y, i, half):
     return x[i] + (x[i+1] - x[i]) * ((half - y[i]) / (y[i+1] - y[i]))
 
 def half_max_x(x, y):
-    half = max(y)/2.0
+    """
+    Find the x-values at which the given y-values cross half of their maximum value.
+
+    Args:
+        x (array-like): The x-coordinates corresponding to the y-values.
+        y (array-like): The y-values.
+
+    Returns:
+        list: A list of two x-values at which the y-values cross half of their maximum value.
+
+    Raises:
+        ValueError: If the length of x and y arrays is not equal.
+
+    Notes:
+        - The function assumes that the y-values have a single peak.
+        - The function uses linear interpolation to estimate the x-values.
+
+    """
+    half = max(y) / 2.0
     signs = np.sign(np.add(y, -half))
     zero_crossings = (signs[0:-2] != signs[1:-1])
     zero_crossings_i = np.where(zero_crossings)[0]
-    return [lin_interp(x, y, zero_crossings_i[0], half),
-            lin_interp(x, y, zero_crossings_i[1], half)]
 
+    if len(x) != len(y):
+        raise ValueError("x and y arrays must have the same length.")
 
+    if len(zero_crossings_i) < 2:
+        raise ValueError("Insufficient number of zero crossings found.")
 
+    return [
+        lin_interp(x, y, zero_crossings_i[0], half),
+        lin_interp(x, y, zero_crossings_i[1], half)
+    ]
 
 
 
@@ -424,8 +412,6 @@ class Image:
                 
                 self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]!=0.)])
                                                                 
-                    
-                #self.imlist[b][i],_ = copy.copy(check_mask_and_interpolate(self.imlist[b][i],self.masklist[b][i]))
 
 
     def compute_mfrac(self):
