@@ -163,12 +163,13 @@ def measure_moments_per_tile(config,dictionary_runs,tile):
             timers['deal_with_bmask'] += (t9-t8)
             
             if config['debug']:
-                for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].nbands):
+                image_storage[meds_index] = dict()
+                for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].n_bands):
                     start = 1
                     end = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].ncutout[index_band]
-                    image_storage[index][index_band] = dict()
+                    image_storage[meds_index][index_band] = dict()
                     for exp in range(start, end):  
-                        image_storage[index][index_band][exp] = {'image':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp],
+                        image_storage[meds_index][index_band][exp] = {'image':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp],
                                                                  'psf':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf[index_band][exp],
                                                                  'model_rendered':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_rendered[index_band][exp],
                                                                  'model_all_rendered':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_all_rendered[index_band]}
@@ -231,7 +232,8 @@ def measure_moments_per_tile(config,dictionary_runs,tile):
         
         
 
-
+    if config['debug']:
+        np.save(config['output_folder']+'/targets/images_for_debugging',image_storage)
                   
     total_time = 0.
     print ('')

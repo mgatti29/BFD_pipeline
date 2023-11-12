@@ -53,13 +53,7 @@ def BFD_pipeline(config):
             os.mkdir(config['general']['output_folder']+'/targets/')
         except:
             pass 
-        
-    if not os.path.exists(config['general']['output_folder']+'/MOF_models/'):
-        try:
-            os.mkdir(config['general']['output_folder']+'/MOF_models/')
-        except:
-            pass
-        
+                
     #Add the general keys to all the other submodules
     for key1 in ['measure_moments_targets']:
         if key1 != 'general':

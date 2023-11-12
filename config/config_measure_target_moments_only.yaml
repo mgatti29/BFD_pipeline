@@ -8,7 +8,7 @@ run:
 ######################################################################
 
 general:
-    output_folder:  '/global/cscratch1/sd/mgatti/BFD//_test_new_mask005_V/'
+    output_folder:  '/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp/'
     
     # BFD window function parameters. Defaults: n = 4, sigma = 0.65
     filter_sigma: 0.65  
@@ -33,31 +33,7 @@ measure_moments_targets:
     path_MEDS: '/pscratch/sd/m/mgatti/BFD/data/'
     path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/models/'
     tiles: ['DES0009-6248']
-    flagged_exp_list: '/global/homes/m/mgatti/BFD_pipeline/data/PSF_cuts.npy'
-    max_frac_stamp_masked: 0.1
-    
-
-    output_label: ''
-    tiles: ['DES0137-3749'] 
-    agents_chunk: 20  # works if MPI_per_tile is False. Spawns X multiprocess
-    chunk_size: 1500 
-    max_target_per_tile: 100000 
-    MOF_subtraction: True
-    shredder: True
-    filter:  'KBlackmanHarris' #'normal'
-    path_shredder: '/global/cscratch1/sd/mgatti/BFD//data_y6/shredex/'
-    
-
-    
-    interp_masking : True
-    subtract_background : True
-    add_detection_stamp : False
-    frac_limit: 0.1 # limit for throwing away targets
-    COADD_only: False
-    run_mcal: False
-    debug: False
-    setup_image_sims: False  
-    SN_limit_tosavetemplates: 80
     exp_list: '/global/homes/m/mgatti/BFD_pipeline/data/PSF_cuts.npy'
-    
+    debug: True
+    max_frac_stamp_masked: 0.05
     
