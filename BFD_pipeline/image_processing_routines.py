@@ -12,7 +12,7 @@ from bfd import momentcalc as mc
             
 
 def render_model_on_stamp(gal_pars,psf_pars, wcs, shape, g1=None, 
-                          g2=None, nbrxyref=None, galaxy_model = 'BDF',psf_model = 'piff'):
+                          g2=None, nbrxyref=None, galaxy_model = 'bdf',psf_model = 'piff'):
     """
     Render an image of a galaxy using galaxy and PSF parameters, with optional shearing.
 
@@ -36,7 +36,7 @@ def render_model_on_stamp(gal_pars,psf_pars, wcs, shape, g1=None,
     """
     
 
-    if psf_model =='psf_model':
+    if psf_model =='piff':
         psf_gmix = gmix.GMix(pars=psf_pars)
     elif psf_model =='turb':
         psf_gmix = ngmix.GMixModel(pars=psf_pars['pars'], model="turb")
@@ -52,9 +52,9 @@ def render_model_on_stamp(gal_pars,psf_pars, wcs, shape, g1=None,
                                   dvdrow=wcs.jac[1,1],
                                   dvdcol=wcs.jac[1,0])
 
-    if gal_model =='bdf':
+    if galaxy_model =='bdf':
         gmix_sky = gmix.GMixModel(gal_pars, model='bdf')
-    elif gal_model =='shredder':
+    elif galaxy_model =='shredder':
         g_ = copy.deepcopy(gal_pars)
         gmix_sky = ngmix.GMix(pars=g_.reshape(60))
         
@@ -77,7 +77,7 @@ def render_model_on_stamp(gal_pars,psf_pars, wcs, shape, g1=None,
             gmix_image.set_cen(v, u)
 
         # Generate the galaxy image
-        image = gmix_image.make_image((shape, shape), jacobian=jac)
+        image = det*gmix_image.make_image((shape, shape), jacobian=jac)
 
     except Exception as e:
         # Handle exceptions during image generation and decide what to return based on return_PSF flag
@@ -363,7 +363,6 @@ class CollectionOfImages:
         - use_COADD_only: Flag to use only the coaddition image for rendering.
         This function handles the rendering of models onto the image stamps, including both the target object and others in the field.
         '''
-        flag_render_model = 0
         
         model_rendered = []
         model_rendered_all = []
@@ -385,12 +384,13 @@ class CollectionOfImages:
                 rendered_image = np.zeros((size_image,size_image))
 
                 try:
+                #if 1==1:
                     wcs = self.MEDS_stamps[MEDS_index].make_WCS_2objects(self.MEDS_stamps[MEDS_index], self.MEDS_stamps[MEDS_index].bands[b], i)
                     self_model,jac = render_model_on_stamp(self.MEDS_stamps[MEDS_index].model_parameters[band]['gal_pars'],
                                                 self.MEDS_stamps[MEDS_index].model_parameters[band]['psf_pars'],wcs,size_image)
 
                 except:
-                    flag_render_model+=100
+
                     self_model = np.zeros((size_image,size_image))
 
                     
@@ -407,13 +407,12 @@ class CollectionOfImages:
                     
                         try:
                             wcs = self.MEDS_stamps[MEDS_index].make_WCS_2objects(self.MEDS_stamps[MEDS_index_j], self.MEDS_stamps[MEDS_index].bands[b], i)
-                            rendered_image_j,jac = render_model_on_stamp(self.MEDS_stamps[MEDS_index_j].MOF_models[band]['gal_pars'],
-                                                              self.MEDS_stamps[MEDS_index].MOF_models[band]['psf_pars'],wcs,
+                            rendered_image_j,jac = render_model_on_stamp(self.MEDS_stamps[MEDS_index_j].model_parameters[band]['gal_pars'],
+                                                              self.MEDS_stamps[MEDS_index].model_parameters[band]['psf_pars'],wcs,
                                                               self.MEDS_stamps[MEDS_index].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)                    
                             rendered_image += rendered_image_j
                             model_rendered_flag_band.append(True)
                         except:
-                            flag_render_model +=1
                             model_rendered_flag_band.append(False)
                             pass
                                 
@@ -425,8 +424,7 @@ class CollectionOfImages:
             model_rendered_flag.append(model_rendered_flag_band)
         self.MEDS_stamps[MEDS_index].model_rendered = model_rendered
         self.MEDS_stamps[MEDS_index].model_all_rendered = model_rendered_all
-        self.MEDS_stamps[MEDS_index].flag_render_model = flag_render_model
-        self.MEDS_stamps[MEDS_index].model_rendered_flag = model_rendered_flag
+
              
         
 
@@ -452,6 +450,12 @@ class MedsStamp:
         self.coadd_ID = [m['id'][MEDS_index] for m in meds_array]
         
         self.bands = bands
+        
+        # this is useful to know in advance for the neighbours subtraction
+        self.ncutout = [m['ncutout'][MEDS_index] for m in meds_array]
+        self.orig_rowcol = [[ (meds_array[b]['orig_row'][MEDS_index][i],meds_array[b]['orig_col'][MEDS_index][i]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))] 
+            
+            
         self.n_bands = len(bands)
         self.xyshift = None
         self.moments = None
@@ -693,11 +697,11 @@ class MedsStamp:
         if meds_array != None:
             self.image_ra = [m['ra'][index] for m in meds_array]
             self.image_dec = [m['dec'][index] for m in meds_array]
-            self.ncutout = [m['ncutout'][index] for m in meds_array]
+            #self.ncutout = [m['ncutout'][index] for m in meds_array]
             self.imlist = [m.get_cutout_list(index) for m in meds_array]
    
 
-            self.orig_rowcol = [[ (meds_array[b]['orig_row'][index][i],meds_array[b]['orig_col'][index][i]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))] 
+            #self.orig_rowcol = [[ (meds_array[b]['orig_row'][index][i],meds_array[b]['orig_col'][index][i]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))] 
             self.orig_start_rowcol = [[ (meds_array[b]['orig_start_row'][index][i],meds_array[b]['orig_start_col'][index][i]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))] 
      
             # row,col in the cutouts. Is generally close to center of the tile.
@@ -736,6 +740,10 @@ class MedsStamp:
                     print ('No PSF extension in this file')
         
 
+        
+
+        
+        
     def make_WCS(self):
         '''
         Generates WCS (World Coordinate System) information for the MEDS stamp.

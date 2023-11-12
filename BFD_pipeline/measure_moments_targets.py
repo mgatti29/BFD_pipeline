@@ -66,7 +66,8 @@ def measure_moments_per_tile(config,dictionary_runs,tile):
     # Initialise where we're going to store all the images loaded from the MEDS files
     Collection_of_wide_field_galaxies = CollectionOfImages()
     
-    for meds_index in range(meds_array[0].size):
+    print ('Initialising MEDS stamps')
+    for meds_index in frogress.bar(range(meds_array[0].size)):
         Collection_of_wide_field_galaxies.add_MEDS_stamp(copy.deepcopy(MedsStamp(meds_index, meds_array = meds_array, bands = config['bands_meds_files'])))
         
     
@@ -108,6 +109,7 @@ def measure_moments_per_tile(config,dictionary_runs,tile):
     timers['extra_info'] = 0.
     timers['count'] = 0.
     
+    print ('Looping over targets')
     for meds_index in frogress.bar(range(100,200)): #meds_array[0].size)):
         
         
