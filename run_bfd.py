@@ -18,7 +18,7 @@ conf=BFD_pipeline.read_config(args.config)
 
 
 if args.tiles is not None:
-    conf['measure_moments_targets']['tiles'] = [args.tiles]
+    conf['measure_moments_targets']['tiles'] = args.tiles
 
 if args.output_label is not None:
     conf['measure_moments_targets']['output_label'] = args.output_label
