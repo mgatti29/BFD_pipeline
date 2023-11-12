@@ -172,7 +172,7 @@ def measure_moments_per_tile(config,dictionary_runs,tile):
                         image_storage[meds_index][index_band][exp] = {'image':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp],
                                                                  'psf':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf[index_band][exp],
                                                                  'model_rendered':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_rendered[index_band][exp],
-                                                                 'model_all_rendered':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_all_rendered[index_band]}
+                                                                 'model_all_rendered':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_all_rendered[index_band][exp]}
                         
             
             # Compute moments
