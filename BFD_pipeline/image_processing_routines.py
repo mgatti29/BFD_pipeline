@@ -363,70 +363,92 @@ class CollectionOfImages:
         - use_COADD_only: Flag to use only the coaddition image for rendering.
         This function handles the rendering of models onto the image stamps, including both the target object and others in the field.
         '''
-        
+
         model_rendered = []
         model_rendered_all = []
-        model_rendered_flag = []
-        
         for b, band in enumerate(self.MEDS_stamps[MEDS_index].bands):
-            model_rendered_band = []
-            model_rendered_all_band = []  
-            model_rendered_flag_band = []
             if use_COADD_only:
                 start = 0
                 end = 1
             else:
-                start = 0
+                start = 1
                 end = self.MEDS_stamps[MEDS_index].ncutout[b]
-            
-            for i in range(start, end): 
-                size_image = self.MEDS_stamps[MEDS_index].imlist[b][i].shape[0]    
-                rendered_image = np.zeros((size_image,size_image))
 
-                try:
-                #if 1==1:
-                    wcs = self.MEDS_stamps[MEDS_index].make_WCS_2objects(self.MEDS_stamps[MEDS_index], self.MEDS_stamps[MEDS_index].bands[b], i)
-                    self_model,jac = render_model_on_stamp(self.MEDS_stamps[MEDS_index].model_parameters[band]['gal_pars'],
-                                                self.MEDS_stamps[MEDS_index].model_parameters[band]['psf_pars'],wcs,size_image)
+            model_rendered_band = []
+            model_rendered_all_band = []
+            for i in range( end): 
+                if i >= start:
+                    size_image = self.MEDS_stamps[MEDS_index].imlist[b][i].shape[0]    
+         
+                    rendered_image = np.zeros((size_image,size_image))
 
-                except:
 
-                    self_model = np.zeros((size_image,size_image))
+                    # generate self model -----
+                    wcs = self.MEDS_stamps[MEDS_index].wcslist[b][i]
 
-                    
-                if render_others:
+                    model_pars = self.MEDS_stamps[MEDS_index].model_parameters
 
-                    # find a lit
+                    psf_gmix = ngmix.gmix.GMix(pars=self.MEDS_stamps[MEDS_index].model_parameters[band]['psf_pars'])
+                    gmix_sky  = ngmix.gmix.GMixBDF(self.MEDS_stamps[MEDS_index].model_parameters[band]['gal_pars'])
+                    det = np.abs(wcs.getdet()) 
+                    jac = ngmix.jacobian.Jacobian(row=wcs.xy0[1],
+                                                    col=wcs.xy0[0],
+                                                    dudrow=wcs.jac[0,1],
+                                                    dudcol=wcs.jac[0,0],
+                                                    dvdrow=wcs.jac[1,1],
+                                                    dvdcol=wcs.jac[1,0])
+                    gmix_image = gmix_sky.convolve(psf_gmix)
+
+
+                    #v, u = jac(nbrxyref[1], nbrxyref[0])
+                    #gmix_image.set_cen(v, u)
+                    image_self = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
+
+
+                    # identify neighbours
                     list_MEDS_indexes = np.unique(self.MEDS_stamps[MEDS_index].seglist[b][0].flatten())
                     list_MEDS_indexes = list_MEDS_indexes[list_MEDS_indexes!=0]
                     list_MEDS_indexes = list_MEDS_indexes[list_MEDS_indexes!=self.MEDS_stamps[MEDS_index].MEDS_index+1]
 
-
                     for mute_index in list_MEDS_indexes:
-                        MEDS_index_j = np.array(self.MEDS_indexes)[np.in1d(np.array(self.MEDS_indexes),mute_index-1)][0]
-                    
                         try:
-                            wcs = self.MEDS_stamps[MEDS_index].make_WCS_2objects(self.MEDS_stamps[MEDS_index_j], self.MEDS_stamps[MEDS_index].bands[b], i)
-                            rendered_image_j,jac = render_model_on_stamp(self.MEDS_stamps[MEDS_index_j].model_parameters[band]['gal_pars'],
-                                                              self.MEDS_stamps[MEDS_index].model_parameters[band]['psf_pars'],wcs,
-                                                              self.MEDS_stamps[MEDS_index].imlist[b][i].shape[0],  g1 = 0., g2 = 0.)                    
-                            rendered_image += rendered_image_j
-                            model_rendered_flag_band.append(True)
+                            MEDS_index_j = mute_index-1
+
+
+                            pos_band = np.arange(self.MEDS_stamps[MEDS_index].n_bands)[np.in1d(self.MEDS_stamps[MEDS_index].bands,band)][0]
+
+                            drow = self.MEDS_stamps[MEDS_index].rowcol[pos_band][i][0] - (self.MEDS_stamps[MEDS_index].orig_rowcol[pos_band][i][0] - self.MEDS_stamps[MEDS_index_j].orig_rowcol[pos_band][i][0])
+                            dcol = self.MEDS_stamps[MEDS_index].rowcol[pos_band][i][1] - (self.MEDS_stamps[MEDS_index].orig_rowcol[pos_band][i][1] - self.MEDS_stamps[MEDS_index_j].orig_rowcol[pos_band][i][1])
+
+
+                            jac = ngmix.jacobian.Jacobian(row=drow,
+                                                    col=dcol,
+                                                    dudrow=wcs.jac[0,1],
+                                                    dudcol=wcs.jac[0,0],
+                                                    dvdrow=wcs.jac[1,1],
+                                                    dvdcol=wcs.jac[1,0])
+
+                            gmix_sky  = ngmix.gmix.GMixBDF(self.MEDS_stamps[MEDS_index_j].model_parameters[band]['gal_pars'])
+
+                            gmix_image = gmix_sky.convolve(psf_gmix)
+                            image = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
+
+                            rendered_image+=image
                         except:
-                            model_rendered_flag_band.append(False)
                             pass
-                                
-                model_rendered_band.append(rendered_image)
-                model_rendered_all_band.append(rendered_image+self_model)
                 
+                    model_rendered_band.append(rendered_image)
+                    model_rendered_all_band.append(rendered_image+image_self)
+                else:
+                    model_rendered_band.append(None) 
+                    model_rendered_all_band.append(None)    
+
             model_rendered.append(model_rendered_band) 
             model_rendered_all.append(model_rendered_all_band) 
-            model_rendered_flag.append(model_rendered_flag_band)
+                           
         self.MEDS_stamps[MEDS_index].model_rendered = model_rendered
         self.MEDS_stamps[MEDS_index].model_all_rendered = model_rendered_all
 
-             
-        
 
         
             
@@ -676,12 +698,21 @@ class MedsStamp:
                 bmask = copy.deepcopy(self.masklist[b][i])
                 bmask |= np.rot90(self.masklist[b][i])
     
-                self.imlist[b][i][bmask==0] += self.model_all_rendered[b][i][bmask==0]
-
-                s0 = self.model_all_rendered[b][i].shape[0]
-                
-                self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]!=0.)])
+                try:
+                    self.imlist[b][i][bmask==0] += self.model_all_rendered[b][i][bmask==0]
+                    s0 = self.model_all_rendered[b][i].shape[0]
+                    self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]!=0.)])
                                                                 
+        
+                except:
+                    s0 = self.imlist[b][i].shape[0]
+                    self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]!=0.)])
+                                                                
+        
+                    
+                    
+                
+                                                 
         
         
     def Load_MEDS(self, index, meds_array = [], mask_exposure = None):
@@ -765,35 +796,7 @@ class MedsStamp:
             
             
             
-        
-    def make_WCS_2objects(self, obj2, band, exp,return_shift=False):
-        '''
-        it makes the BFD wcs for a secon obj Image provided by the user.
-        It requires to sepcify the band and the exposure.
-        '''
-        pos_band = np.arange(self.n_bands)[np.in1d(self.bands,band)][0]
-        
-        '''
-        rowcol are ~ the coordinates of the center of the cutout (i.e. where 'self' is located).
-        orig_rowcol are the coordinates wrt the tile, such that (self.orig_rowcol - obj.orig_rowcol) corresponds to the
-        coordinate difference between the two objects' center.
-        '''
 
-        drow = self.rowcol[pos_band][exp][0] - (self.orig_rowcol[pos_band][exp][0] - obj2.orig_rowcol[pos_band][exp][0])
-        dcol = self.rowcol[pos_band][exp][1] - (self.orig_rowcol[pos_band][exp][1] - obj2.orig_rowcol[pos_band][exp][1])
-        
-    
-        nbrxyref = (dcol,drow)
-        nbruvref = (0,0)
-        jac = self.jaclist[pos_band][exp]
-        nbrduv_dxy = np.array( [ [jac['dudcol'], jac['dudrow']],
-                                 [jac['dvdcol'], jac['dvdrow']]])
-        nbrwcs = bfd.WCS(nbrduv_dxy, xyref=nbrxyref, uvref=nbruvref)
-        if return_shift:
-            return nbrwcs,nbrxyref
-        else:
-            return nbrwcs
-            
   
             
 
