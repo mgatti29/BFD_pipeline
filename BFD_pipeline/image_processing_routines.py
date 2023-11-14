@@ -8,9 +8,92 @@ import bfd
 import copy
 import bfd
 from bfd import momentcalc as mc
+from bfd.keywords import *
+import glob        
+import os
+import timeit
 
-            
+def collapse(path, output_label):
+    '''
+    Processes and combines data from multiple FITS files located in a given directory,
+    and saves the combined data into a single FITS file.
 
+    Parameters:
+    path (str): Path to the directory containing FITS files to be processed.
+    output_label (str): Label for the output file.
+
+    The function performs the following steps:
+    1. Reads all FITS files in the specified directory.
+    2. Concatenates data from a specific field across all files.
+    3. Creates a new FITS file structure and populates it with aggregated data.
+    4. Copies specific header information from the original files to the new file.
+    5. Attempts to delete the original files.
+    6. Writes the new aggregated data into a FITS file on disk.
+    '''
+
+    files = glob.glob(path + '*')
+
+    # Initialize variables for aggregated data and header information
+    all_data = []
+    all_headers = []
+
+    # Iterating over files, opening and processing each
+    for ii, file_ in enumerate(files):
+        with fits.open(file_) as mute:
+            all_data.append(mute[1].data)
+            all_headers.append(mute[0].header)
+            # Aggregate 'moments' data from the first file
+            if ii == 0:
+                mf = mute[1].data['moments'][:, 0]
+            else:
+                # Concatenate 'moments' data from subsequent files
+                mf = np.hstack([mf, mute[1].data['moments'][:, 0]])
+
+    # Creating a new FITS file structure
+    hdulist = fits.HDUList([fits.PrimaryHDU()])
+    cols = []        
+    cols.append(fits.Column(name="notes",format="K",array=0*np.ones_like(mf)))#noisetier[mask]*np.ones_like(noisetier[mask])))
+    new_cols = fits.ColDefs(cols)
+
+    # Assuming that the structure of all FITS files is the same,
+    # using the columns from the first file for the BinTableHDU
+    hdu = fits.BinTableHDU.from_columns(all_data[0].columns+new_cols)
+
+    # Aggregating data from each column across all files
+    for cname in all_data[0].columns.names:
+        sofar = 0
+        for data in all_data:
+            nn = len(data[cname])
+            hdu.data[cname][sofar:sofar + nn] = data[cname]
+            sofar += nn
+
+    # Additional header information
+    for key in (hdrkeys['weightN'], hdrkeys['weightSigma']):
+        hdulist[0].header[key] = mute[0].header[key]
+    hdulist[0].header['STAMPS'] = mute[0].header['STAMPS']
+
+    # Append the aggregated data to the HDU list
+    hdulist.append(hdu)
+    del hdu
+    # Attempt to delete the original files
+    #for file_ in files:
+    #    try:
+    #        os.remove(file_)
+    #    except:
+    #        # Ignore if the file cannot be deleted
+    #        pass
+
+    # Write the new FITS file to disk
+    hdulist.writeto(path + output_label + '.fits',overwrite=True)
+    # Attempt to delete the original files
+    for file_ in files:
+        try:
+            os.remove(file_)
+        except:
+            # Ignore if the file cannot be deleted
+            pass
+    
+        
 def render_model_on_stamp(gal_pars,psf_pars, wcs, shape, g1=None, 
                           g2=None, nbrxyref=None, galaxy_model = 'bdf',psf_model = 'piff'):
     """
@@ -87,45 +170,102 @@ def render_model_on_stamp(gal_pars,psf_pars, wcs, shape, g1=None,
     return image, jac
     
     
-def check_on_bad_exposures(meds_array, bad_exposure_list):
+def check_on_exposures(meds_array, exposure_list,bands):
     # Extract image paths from the meds_array, which is assumed to contain
     # metadata about the images. The '_image_info' dictionary key is used
     # to access the paths, and the leading character of each path is removed.
+    
     images_path = [m._image_info['image_path'][1:] for m in meds_array]
-
+    exposures_MEDS = dict()
     # Loop through each band (spectral range) to process the exposures.
-    for index_band in range(len(meds_array)):
+    for index_band,band in enumerate(bands):
         # For the first band, extract the exposure numbers from the image paths.
         # The exposure number is assumed to be at the start of the file name,
         # following a specific pattern ('red/D00'). This number is converted to an integer.
-        if index_band == 0:
-            exposures_MEDS = np.array([np.int((image_path).split('_')[0].strip('red/D00')) for image_path in images_path[index_band]])
-        else:
-            # For subsequent bands, perform the same extraction and then
-            # combine (stack horizontally) these exposure numbers with those from previous bands.
-            exposures_MEDS_1 = np.array([np.int((image_path).split('_')[0].strip('red/D00')) for image_path in images_path[index_band]])
-            exposures_MEDS = np.hstack([exposures_MEDS, exposures_MEDS_1])
-    
-    # Initialize a dictionary to hold the mask for each band's bad exposures.
+        exposures_MEDS[index_band] = np.unique(np.array([np.int((image_path).split('_')[0].strip('red/D00')) for image_path in images_path[index_band]]))
+
     mask_exposure = dict()
-    # Iterate over each band in the bad_exposure_list.
-    for band in bad_exposure_list.keys():
+    for index_band,band in enumerate(bands):
         # Determine which exposures in the current band are bad by matching them
         # against the exposure list obtained from the images.
-        match_exposures = np.array(np.in1d(bad_exposure_list[band]['exp'], exposures_MEDS))
 
-        try:
-            # Attempt to create a unique identifier for each bad exposure by combining
-            # the exposure number with the CCD number (multiplied by 100 for scaling).
-            # This identifier helps in masking specific exposures in each band.
-            mask_exposure[band] = 100*bad_exposure_list[band]['exp'][match_exposures] + bad_exposure_list[band]['ccd'][match_exposures]
-        except:
-            # If the above operation fails, fall back to using only the exposure numbers.
-            mask_exposure[band] = bad_exposure_list[band]['exp'][match_exposures]
-                    
+        # these are lists of good exposures + CCD where the PSF did not fail! 
+        match_exposures = np.array(np.in1d(exposure_list[band]['exp'], exposures_MEDS[index_band]))
+        mask_exposure[band] = 100*exposure_list[band]['exp'][match_exposures] + exposure_list[band]['ccd'][match_exposures]
+
+    # this is a list of EXP where the PSF FWHM is > 1.72 and that needs to be excluded.
+    match_exposures = np.array(np.in1d(exposure_list['all']['exp'], exposures_MEDS[index_band]))
+    mask_exposure['all'] = exposure_list['all']['exp'][match_exposures]
     return mask_exposure
 
 
+
+
+
+
+def save_moments_targets(self,fitsname):
+    '''
+    modified save function for moments with different sigma_Mf entries
+    '''
+
+    if len(self.id)>0:
+        col=[]
+        col.append(fits.Column(name="id",format="K",array=np.array(self.id)))
+
+
+        col.append(fits.Column(name="ra",format="D",array= np.array(self.xy)[:,0]))
+        col.append(fits.Column(name="dec",format="D",array=np.array(self.xy)[:,1]))
+
+
+        col.append(fits.Column(name="moments",format="5E",array=np.array(self.moment)))  
+        col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
+        col.append(fits.Column(name="psf_moments",format="4E",array=self.psf_moment))
+        col.append(fits.Column(name="psf_moment_obs",format="4E",array=self.psf_moment_obs))
+        col.append(fits.Column(name="psf_hsm_moments",format="3E",array=self.psf_hsm_moment))
+        col.append(fits.Column(name="psf_hsm_moments_obs",format="3E",array=self.psf_hsm_moments_obs))
+
+        
+
+
+        try:
+            l = np.array(self.meb).shape[1]
+        except:
+            l = len(np.array(self.meb))
+        col.append(fits.Column(name="bad_exposures",format="{0}K".format(l),array=np.array(self.bad_exposures)))
+        col.append(fits.Column(name="good_exposures",format="{0}K".format(l),array=np.array(self.good_exposures)))
+
+        col.append(fits.Column(name="Mf_per_band",format="{0}E".format(l),array=self.meb))
+        col.append(fits.Column(name="cov_Mf_per_band",format="{0}E".format(l),array=np.array(self.cov_Mf_per_band)))
+        col.append(fits.Column(name="mfrac_per_band",format="{0}E".format(l),array=np.array(self.mfrac_per_band)))
+
+        col.append(fits.Column(name="DESDM_coadd_x",format="E",array=np.array(self.DESDM_coadd_x)))
+        col.append(fits.Column(name="DESDM_coadd_y",format="E",array=np.array(self.DESDM_coadd_y)))
+
+
+        try:
+            l = np.array(self.orig_row).shape[1]
+        except:
+            l = len(self.orig_row)
+        col.append(fits.Column(name="orig_col",format="{0}E".format(l),array=np.array(self.orig_col)))
+        col.append(fits.Column(name="orig_row",format="{0}E".format(l),array=np.array(self.orig_row)))
+        col.append(fits.Column(name="ccd_number",format="{0}K".format(l),array=np.array(self.ccd_name)))
+
+        col.append(fits.Column(name="bkg",format="D",array=self.bkg))
+        col.append(fits.Column(name="pixels_used_for_bkg",format="K",array=self.pixel_used_bkg))
+        #'''
+        # let's add, maybe, some average masked fraction
+
+        self.prihdu.header['STAMPS'] = 0
+
+
+        cols=fits.ColDefs(col)
+        tbhdu = fits.BinTableHDU.from_columns(cols)
+        thdulist = fits.HDUList([self.prihdu,tbhdu])
+        thdulist.writeto(fitsname,overwrite=True)
+
+
+
+     
 class GalaxyModelsTable:
     """
     A class for handling galaxy models tables stored in FITS format.
@@ -289,8 +429,6 @@ class CollectionOfImages:
         self.MEDS_indexes = []
         
         
-
-        
     def add_MEDS_stamp(self, MEDS_stamp):
         '''
         Adds a single MEDS stamp to the collection.
@@ -366,6 +504,9 @@ class CollectionOfImages:
 
         model_rendered = []
         model_rendered_all = []
+        
+        flag_rendered_models = []
+        
         for b, band in enumerate(self.MEDS_stamps[MEDS_index].bands):
             if use_COADD_only:
                 start = 0
@@ -376,84 +517,147 @@ class CollectionOfImages:
 
             model_rendered_band = []
             model_rendered_all_band = []
+            
+            
+            list_MEDS_indexes = np.unique(self.MEDS_stamps[MEDS_index].seglist[b][0].flatten())
+            list_MEDS_indexes = list_MEDS_indexes[list_MEDS_indexes!=0]
+            list_MEDS_indexes = list_MEDS_indexes[list_MEDS_indexes!=self.MEDS_stamps[MEDS_index].MEDS_index+1]
+
+            flag_rendered_models_band = []
+            
+            # sometimes the model doesn't exist. in this case, let's flag the exposure 
             for i in range( end): 
                 if i >= start:
-                    size_image = self.MEDS_stamps[MEDS_index].imlist[b][i].shape[0]    
-         
-                    rendered_image = np.zeros((size_image,size_image))
+                    try:
+                        size_image = self.MEDS_stamps[MEDS_index].imlist[b][i].shape[0]    
+
+                        rendered_image = np.zeros((size_image,size_image))
 
 
-                    # generate self model -----
-                    wcs = self.MEDS_stamps[MEDS_index].wcslist[b][i]
-
-                    model_pars = self.MEDS_stamps[MEDS_index].model_parameters
-
-                    psf_gmix = ngmix.gmix.GMix(pars=self.MEDS_stamps[MEDS_index].model_parameters[band]['psf_pars'])
-                    gmix_sky  = ngmix.gmix.GMixBDF(self.MEDS_stamps[MEDS_index].model_parameters[band]['gal_pars'])
-                    det = np.abs(wcs.getdet()) 
-                    jac = ngmix.jacobian.Jacobian(row=wcs.xy0[1],
-                                                    col=wcs.xy0[0],
-                                                    dudrow=wcs.jac[0,1],
-                                                    dudcol=wcs.jac[0,0],
-                                                    dvdrow=wcs.jac[1,1],
-                                                    dvdcol=wcs.jac[1,0])
-                    gmix_image = gmix_sky.convolve(psf_gmix)
+                        # generate self model -----
+                        wcs = self.MEDS_stamps[MEDS_index].wcslist[b][i]
+                        psf_gmix = ngmix.gmix.GMix(pars=self.MEDS_stamps[MEDS_index].model_parameters[band]['psf_pars'])
+                        det=np.abs(wcs.getdet()) 
+                        #'''
+                        if (self.MEDS_stamps[MEDS_index].mfrac_inner[b][i] > 0) and (self.MEDS_stamps[MEDS_index].mfrac_flag[b][i]) :
 
 
-                    #v, u = jac(nbrxyref[1], nbrxyref[0])
-                    #gmix_image.set_cen(v, u)
-                    image_self = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
-
-
-                    # identify neighbours
-                    list_MEDS_indexes = np.unique(self.MEDS_stamps[MEDS_index].seglist[b][0].flatten())
-                    list_MEDS_indexes = list_MEDS_indexes[list_MEDS_indexes!=0]
-                    list_MEDS_indexes = list_MEDS_indexes[list_MEDS_indexes!=self.MEDS_stamps[MEDS_index].MEDS_index+1]
-
-                    for mute_index in list_MEDS_indexes:
-                        try:
-                            MEDS_index_j = mute_index-1
-
-
-                            pos_band = np.arange(self.MEDS_stamps[MEDS_index].n_bands)[np.in1d(self.MEDS_stamps[MEDS_index].bands,band)][0]
-
-                            drow = self.MEDS_stamps[MEDS_index].rowcol[pos_band][i][0] - (self.MEDS_stamps[MEDS_index].orig_rowcol[pos_band][i][0] - self.MEDS_stamps[MEDS_index_j].orig_rowcol[pos_band][i][0])
-                            dcol = self.MEDS_stamps[MEDS_index].rowcol[pos_band][i][1] - (self.MEDS_stamps[MEDS_index].orig_rowcol[pos_band][i][1] - self.MEDS_stamps[MEDS_index_j].orig_rowcol[pos_band][i][1])
-
-
-                            jac = ngmix.jacobian.Jacobian(row=drow,
-                                                    col=dcol,
-                                                    dudrow=wcs.jac[0,1],
-                                                    dudcol=wcs.jac[0,0],
-                                                    dvdrow=wcs.jac[1,1],
-                                                    dvdcol=wcs.jac[1,0])
-
-                            gmix_sky  = ngmix.gmix.GMixBDF(self.MEDS_stamps[MEDS_index_j].model_parameters[band]['gal_pars'])
-
+                            gmix_sky  = ngmix.gmix.GMixBDF(self.MEDS_stamps[MEDS_index].model_parameters[band]['gal_pars'])
+                            det = np.abs(wcs.getdet()) 
+                            jac = ngmix.jacobian.Jacobian(  row=wcs.xy0[1],
+                                                            col=wcs.xy0[0],
+                                                            dudrow=wcs.jac[0,1],
+                                                            dudcol=wcs.jac[0,0],
+                                                            dvdrow=wcs.jac[1,1],
+                                                            dvdcol=wcs.jac[1,0])
                             gmix_image = gmix_sky.convolve(psf_gmix)
-                            image = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
 
-                            rendered_image+=image
-                        except:
-                            pass
+
+                            #v, u = jac(nbrxyref[1], nbrxyref[0])
+                            #gmix_image.set_cen(v, u)
+                            image_self = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
+
+                        else:
+
+                            image_self = None
+                        #'''
+                        image_self = None
+                    
+                        central_went_wrong = False
+                    except:
+                        image_self = None
+                        flag_rendered_models_band.append(False)
+                        central_went_wrong = True
+                    # identify neighbours
+
+                    flag_rendered_models_band_i = True
+                    if not central_went_wrong:
+                        for mute_index in list_MEDS_indexes:
+                            try:
+                                MEDS_index_j = mute_index-1
+
+                                st = timeit.default_timer()
+                                
+                                pos_band = np.arange(self.MEDS_stamps[MEDS_index].n_bands)[np.in1d(self.MEDS_stamps[MEDS_index].bands,band)][0]
+
+                                drow = self.MEDS_stamps[MEDS_index].rowcol[pos_band][i][0] - (self.MEDS_stamps[MEDS_index].orig_rowcol[pos_band][i][0] - self.MEDS_stamps[MEDS_index_j].orig_rowcol[pos_band][i][0])
+                                dcol = self.MEDS_stamps[MEDS_index].rowcol[pos_band][i][1] - (self.MEDS_stamps[MEDS_index].orig_rowcol[pos_band][i][1] - self.MEDS_stamps[MEDS_index_j].orig_rowcol[pos_band][i][1])
+
+
+                                jac = ngmix.jacobian.Jacobian(row=drow,
+                                                        col=dcol,
+                                                        dudrow=wcs.jac[0,1],
+                                                        dudcol=wcs.jac[0,0],
+                                                        dvdrow=wcs.jac[1,1],
+                                                        dvdcol=wcs.jac[1,0])
+
+                                pars_ = self.MEDS_stamps[MEDS_index_j].model_parameters[band]['gal_pars']
+                                if pars_[-1] <0 :
+                                    pars_[-1] = 0.
+                                gmix_sky  = ngmix.gmix.GMixBDF(pars_)
+
+                                gmix_image = gmix_sky.convolve(psf_gmix)
+                                image = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
+
+                                rendered_image+=image
+                                flag_rendered_models_band_i = flag_rendered_models_band_i & True
+                                
+                                end = timeit.default_timer()
+
+                            except:
+                                flag_rendered_models_band_i = flag_rendered_models_band_i & False
+                                
+                                pass
+                        flag_rendered_models_band.append(flag_rendered_models_band_i)
                 
                     model_rendered_band.append(rendered_image)
-                    model_rendered_all_band.append(rendered_image+image_self)
+                    if image_self is not None:
+                        rendered_image += image_self
+                    model_rendered_all_band.append(rendered_image)
                 else:
+                    flag_rendered_models_band.append(False)
                     model_rendered_band.append(None) 
                     model_rendered_all_band.append(None)    
+                    
+                
 
             model_rendered.append(model_rendered_band) 
             model_rendered_all.append(model_rendered_all_band) 
+            flag_rendered_models.append(flag_rendered_models_band)
                            
         self.MEDS_stamps[MEDS_index].model_rendered = model_rendered
         self.MEDS_stamps[MEDS_index].model_all_rendered = model_rendered_all
+        self.MEDS_stamps[MEDS_index].flag_rendered_models =   flag_rendered_models
+
 
 
         
-            
-            
+        # check that there are enough exposures
+        
+    
+        bands_not_masked = dict()
+        for b in range(len(self.MEDS_stamps[MEDS_index].bands)):
+            bands_not_masked[self.MEDS_stamps[MEDS_index].bands[b]] = True
+            if use_COADD_only:
+                if not flag_rendered_models[b][i]:
+                    bands_not_masked[self.MEDS_stamps[MEDS_index].bands[b]] = False
+                    
+            else:
+                bands_not_masked[self.MEDS_stamps[MEDS_index].bands[b]] = False
+                for i in range(1, self.MEDS_stamps[MEDS_index].ncutout[b]):  #MG *******+
+                    # at least one exposure needs to make it
+                    if not flag_rendered_models[b][i]:
+                        pass
+                    else:
+                        bands_not_masked[self.MEDS_stamps[MEDS_index].bands[b]] = True
+                  
+        bands_not_masked_list = []
+        for b in bands_not_masked.keys():
+            if bands_not_masked[b]:
+                 bands_not_masked_list.append(b)
+        return bands_not_masked_list
 
+        
 
 class MedsStamp:
     '''
@@ -492,6 +696,8 @@ class MedsStamp:
         - use_COADD_only: Flag to consider only the coadded image.
         Returns a list of bands not significantly masked.
         '''
+        
+  
         self.size =  [[len(self.masklist[b][i].flatten()) for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
         #self.mfrac = [[1.*len(np.zeros(self.size[b][i])[(self.wtlist[b][i].flatten()==0.) | (self.masklist[b][i].flatten()!=0.)])/self.size[b][i] for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
         self.mfrac_flag = [[True for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
@@ -499,27 +705,37 @@ class MedsStamp:
         #
         
         
-        # gaussian aperture ****
-        psf_fwhm = 2.
-        Tpsf = ngmix.moments.fwhm_to_T(psf_fwhm)
+        Gaussian_weight = galsim.Gaussian(fwhm=2).drawImage(nx=40,ny=40, scale=0.263)
+        Gaussian_weight.setCenter(0,0)
 
-        psf_pars = [0.0, 0.0, 0.0, 0.00, Tpsf, 1.0]
-        psf_gmix = ngmix.GMixModel(pars=psf_pars, model="turb")
+        mfrac = []
+        mfrac_inner = []
+        for b in range(len(self.bands)):
+            mfrac_ = []
+            mfrac_inner_ = []
+            for i in range((self.ncutout[b])):
 
-        
-        
-        self.mfrac = [[np.sum((psf_gmix.make_image((self.imlist[b][i].shape), jacobian=ngmix.jacobian.Jacobian(row=self.wcslist[b][i].xy0[1],
-                      col=self.wcslist[b][i].xy0[0],
-                      dudrow=self.wcslist[b][i].jac[0,1],
-                      dudcol=self.wcslist[b][i].jac[0,0],
-                      dvdrow=self.wcslist[b][i].jac[1,1],
-                      dvdcol=self.wcslist[b][i].jac[1,0]),fast_exp=True)).flatten()[((self.wtlist[b][i].flatten()==0.) | (self.masklist[b][i].flatten()!=0.))])/np.sum((psf_gmix.make_image((self.imlist[b][i].shape), jacobian=ngmix.jacobian.Jacobian(row=self.wcslist[b][i].xy0[1],
-                      col=self.wcslist[b][i].xy0[0],
-                      dudrow=self.wcslist[b][i].jac[0,1],
-                      dudcol=self.wcslist[b][i].jac[0,0],
-                      dvdrow=self.wcslist[b][i].jac[1,1],
-                      dvdcol=self.wcslist[b][i].jac[1,0]),fast_exp=True)).flatten()) for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
-        
+                shape = self.imlist[b][i].shape
+
+                # add max()
+                slice1 = slice((shape[0]-40)//2, shape[0]- (shape[0]-40)//2)
+                slice2 = slice((shape[0]-40)//2, shape[0]- (shape[0]-40)//2)
+                mask_ = ((self.wtlist[b][i][slice1,slice2]==0.) | (self.masklist[b][i][slice1,slice2] != 0.))
+                mfrac_.append(np.sum((Gaussian_weight.array)[mask_])/np.sum((Gaussian_weight.array)))
+                
+                
+                mask_ = mask_ & (Gaussian_weight.array>0.2*np.max(Gaussian_weight.array))
+                mfrac_inner_.append(np.sum((Gaussian_weight.array)[mask_])/np.sum((Gaussian_weight.array)))
+                
+                
+                
+            mfrac.append(mfrac_)
+            mfrac_inner.append(mfrac_inner_)
+        self.mfrac = mfrac
+        self.mfrac_inner = mfrac_inner
+                
+                
+  
         mfrac_per_band = []
         for b in range(len(self.bands)):
             mfrac_per_band.append(np.mean(np.array(self.mfrac[b])))
@@ -528,16 +744,16 @@ class MedsStamp:
         for b in range(len(self.bands)):
             bands_not_masked[self.bands[b]] = True
             if use_COADD_only:
-                if self.mfrac[b][0] > limit:
+                if (self.mfrac[b][0] > limit):
                     bands_not_masked[self.bands[b]] = False
                     self.mfrac_flag[b][0] = False
             else:
                 bands_not_masked[self.bands[b]] = False
                 for i in range(1, self.ncutout[b]):  #MG *******+
                     # at least one exposure needs to make it
-                    if self.mfrac[b][i] > limit:
+                    if (self.mfrac[b][i] > limit):
                         self.mfrac_flag[b][i] = False
-                    if self.mfrac[b][i] < limit:
+                    else:
                         bands_not_masked[self.bands[b]] = True
                   
         bands_not_masked_list = []
@@ -548,10 +764,151 @@ class MedsStamp:
         return bands_not_masked_list
 
 
+
+        
     def compute_moments(self, sigma = 3, FFT_pad_factor = 2., use_COADD_only = False, bands = ['g','r', 'i', 'z'], 
                                   bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False):
         '''
         Computes moments by combining exposures and bands.
+        - sigma, FFT_pad_factor: Parameters for the BFD filter.
+        - use_COADD_only: Flag to consider only the coadded image.
+        - bands: List of bands to consider.
+        - bands_weights: Weights for different bands.
+        - Detectinator_: Flag to use a specialized detection algorithm.
+        This method is key for extracting scientific information from the image.
+        '''
+        
+        BFD_filter = mc.KBlackmanHarris(sigma = sigma) 
+        
+        images_array = []
+        psf_array = []
+        wcs_array = []
+        noise_array = []
+        band_array = []
+        
+        psf_moments = np.zeros(4)
+        psf_weights = 0
+        
+        good_exposures = 0
+        bad_exposures = 0
+        for  index_band,band in enumerate(bands):
+            if use_COADD_only:
+                start = 0
+                end = 1
+            else:
+                start = 1
+                end = self.ncutout[index_band]
+                
+            for exp in range(start, end):  
+                compute = True
+                # check if we can use the exposure
+                if self.mfrac_flag[index_band][exp]:
+                    pass
+                else:
+                    compute = compute & False
+                if self.explist_mask is not None:
+                    if self.explist_mask[index_band][exp-1]:
+                        pass
+                    else:
+                        compute = compute & False
+            
+                if self.flag_rendered_models[index_band][exp]:
+                    pass
+                else:
+                    compute = compute & False
+                    
+                if compute:
+                    good_exposures += 1
+                    images_array.append(self.imlist[index_band][exp] - self.model_rendered[index_band][exp])
+                    psf_array.append(self.psf[index_band][exp] )
+                    
+                    noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
+                    noise_array.append(noise_rms)
+                    
+                    band_array.append(self.bands[index_band])
+                    
+                    
+                    
+                    # Detectinator ---------------------------------------------------------------------------------
+                    '''     
+                    I think this has to be 1 coherent shift for th galaxy exposures, and proabbly should be a weighted average of all the
+                    exposures shifts, or something like that.
+                    duv_dxy = np.array([[self.wcslist[index_band][exp].jac[0,0], self.wcslist[index_band][exp].jac[0,1]],
+                                        [self.wcslist[index_band][exp].jac[1,0], self.wcslist[index_band][exp].jac[1,1]]])
+                    
+                    
+                    dx,dx_init,kval,ku,kv,d2k,conjugate,kvar,mf_map,mf_cov = Detectinator(img,
+                                                                          psf=self.psf[index_band][exp],
+                                                                          noise_rms=noise_rms,
+                                                                          sn=3,
+                                                                          duv_dxy=duv_dxy,
+                                                                          minsep=5)
+                    wcs_exposure = copy.deepcopy(self.wcslist[index_band][exp])
+    
+                    try:
+                        shift_ =  (dx[0][0]-dx_init[0][0])**2+(dx[0][1]-dx_init[0][1])**2
+                        wcs_exposure.xy0 = dx[0]
+                        wcs_array.append(wcs_exposure)
+                    except:
+                        wcs_array.append(self.wcslist[index_band][exp])
+                    '''
+                    wcs_array.append(self.wcslist[index_band][exp])
+                else:
+                    bad_exposures +=1
+              
+
+        #self.good_exposures = good_exposures      
+        #self.bad_exposures = bad_exposures  
+        
+        # compute image moments ----
+        kds, psf_shifts = bfd.multiImage(images_array, (0,0), psf_array, wcs_array, 
+                             pixel_noiselist = noise_array, bandlist = band_array,
+                             pad_factor=FFT_pad_factor, psf_recenter_sigma = 2.)
+        
+        # Compute PSF moments, for diagnosticss
+                    
+        for i in range(len(kds)):
+            nominal = np.array(psf_array[i].shape) // 2
+            #psf_shift = bfd.momentcalc.xyWin(psf_array[i], sigma=2, nominal=nominal)
+            origin = (0.,0.)
+
+                        
+            #wcs_psf = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
+            
+            wcs_psf = wcs_array[i]
+            wcs_psf.xy0 = (nominal+[psf_shifts[i][1],psf_shifts[i][0]])
+
+
+            delta_stamp = np.zeros_like(psf_array[i])
+            delta_stamp[nominal[0],nominal[1]] = 1.
+
+            psf_kd, _  = bfd.multiImage([psf_array[i]], (0,0), [delta_stamp], [wcs_psf], 
+                     pixel_noiselist = [noise_array[i]], bandlist = ['x'],
+                     pad_factor=FFT_pad_factor) #, psf_recenter_sigma = 2.)
+
+            psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = {'bands':['x'],'weights':[1.]})
+
+
+            Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
+            psf_moments += np.array([Mf,Mr,M1,M2])*bands_weights[index_band]
+            psf_weights += bands_weights[index_band]
+            
+            #'''
+        
+        self.psf_moments  = psf_moments / psf_weights   
+        
+        
+        bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
+
+        multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
+        self.xyshift, error,msg = multi_moment.recenter()
+        self.moments = multi_moment
+
+        
+    def compute_moments_observed_psf(self, sigma = 3, FFT_pad_factor = 2., use_COADD_only = False, bands = ['g','r', 'i', 'z'], 
+                                  bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False):
+        '''
+        Computes moments by combining exposures and bands. Special case where we observed a star.
         - sigma, FFT_pad_factor: Parameters for the BFD filter.
         - use_COADD_only: Flag to consider only the coadded image.
         - bands: List of bands to consider.
@@ -592,6 +949,11 @@ class MedsStamp:
                     else:
                         compute = compute & False
             
+                if self.flag_rendered_models[index_band][exp]:
+                    pass
+                else:
+                    compute = compute & False
+                    
                 if compute:
                     images_array.append(self.imlist[index_band][exp] - self.model_rendered[index_band][exp])
                     psf_array.append(self.psf[index_band][exp] )
@@ -601,75 +963,41 @@ class MedsStamp:
                     
                     band_array.append(self.bands[index_band])
                     
-                    
-                    
-                    # Detectinator ---------------------------------------------------------------------------------
-                    '''     
-                    I think this has to be 1 coherent shift for th galaxy exposures, and proabbly should be a weighted average of all the
-                    exposures shifts, or something like that.
-                    duv_dxy = np.array([[self.wcslist[index_band][exp].jac[0,0], self.wcslist[index_band][exp].jac[0,1]],
-                                        [self.wcslist[index_band][exp].jac[1,0], self.wcslist[index_band][exp].jac[1,1]]])
-                    
-                    
-                    dx,dx_init,kval,ku,kv,d2k,conjugate,kvar,mf_map,mf_cov = Detectinator(img,
-                                                                          psf=self.psf[index_band][exp],
-                                                                          noise_rms=noise_rms,
-                                                                          sn=3,
-                                                                          duv_dxy=duv_dxy,
-                                                                          minsep=5)
-                    wcs_exposure = copy.deepcopy(self.wcslist[index_band][exp])
-    
-                    try:
-                        shift_ =  (dx[0][0]-dx_init[0][0])**2+(dx[0][1]-dx_init[0][1])**2
-                        wcs_exposure.xy0 = dx[0]
-                        wcs_array.append(wcs_exposure)
-                    except:
-                        wcs_array.append(self.wcslist[index_band][exp])
-                    '''
                     wcs_array.append(self.wcslist[index_band][exp])
                         
-                    # -----------------------------------------------
-                    # Compute PSF moments, for diagnosticss
-                    nominal = np.array(self.psf[index_band][exp].shape) // 2
-                    psf_shift = bfd.momentcalc.xyWin(self.psf[index_band][exp], sigma=2, nominal=nominal)
+              
+        # Compute PSF moments, for diagnosticss
                     
-                    origin = (0.,0.)
-                    cent = (nominal+[psf_shift[1],psf_shift[0]]) 
-                    duv_dxy = np.array([[self.wcslist[index_band][exp].jac[0,0], self.wcslist[index_band][exp].jac[0,1]],
-                                        [self.wcslist[index_band][exp].jac[1,0], self.wcslist[index_band][exp].jac[1,1]]])
-                    wcs_psf = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
+        for i in range(len(psf_array)):
+            nominal = np.array(psf_array[i].shape) // 2
+            psf_shift = bfd.momentcalc.xyWin(psf_array[i], sigma=2, nominal=nominal)
+            origin = (0.,0.)
 
-
-                    delta_stamp = np.zeros_like(self.psf[index_band][exp])
-                    delta_stamp[len(self.psf[index_band][exp])//2,len(self.psf[index_band][exp])//2] = 1.
-                                       
-                    psf_kd = bfd.multiImage([self.psf[index_band][exp]], (0,0), [delta_stamp], [wcs_psf], 
-                             pixel_noiselist = [noise_rms], bandlist = ['x'],
-                             pad_factor=FFT_pad_factor) #, psf_recenter_sigma = 2.)
-                    
-                    psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = {'bands':['x'],'weights':[1.]})
-                    
-
-                    Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
-                    psf_moments += np.array([Mf,Mr,M1,M2])
-                    psf_weights += bands_weights[index_band]
-                    #'''               
-                                     
-
-        self.psf_moments  = psf_moments / psf_weights   
                         
-        # compute image moments ----
-        kds = bfd.multiImage(images_array, (0,0), psf_array, wcs_array, 
-                             pixel_noiselist = noise_array, bandlist = band_array,
-                             pad_factor=FFT_pad_factor, psf_recenter_sigma = 2.)
-        
-        
-        
-        bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
+            #wcs_psf = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
+            
+            wcs_psf = wcs_array[i]
+            wcs_psf.xy0 = (nominal+[psf_shift[1],psf_shift[0]])
 
-        multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
-        self.xyshift, error,msg = multi_moment.recenter()
-        self.moments = multi_moment
+
+            delta_stamp = np.zeros_like(psf_array[i])
+            delta_stamp[nominal[0],nominal[1]] = 1.
+
+            psf_kd, _  = bfd.multiImage([images_array[i]], (0,0), [delta_stamp], [wcs_psf], 
+                     pixel_noiselist = [noise_array[i]], bandlist = ['x'],
+                     pad_factor=FFT_pad_factor) #, psf_recenter_sigma = 2.)
+
+            psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = {'bands':['x'],'weights':[1.]})
+
+
+            Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
+            psf_moments += np.array([Mf,Mr,M1,M2])*bands_weights[index_band]
+            psf_weights += bands_weights[index_band]
+            
+            #'''
+        
+        self.psf_moments_observed  = psf_moments / psf_weights   
+        
 
         
     def compute_noise(self):
@@ -685,6 +1013,8 @@ class MedsStamp:
         '''
         Processes the bitmask of the image to handle masked or bad pixels.
         - use_COADD_only: Flag to consider only the coadded image.
+        
+        #if mfrac_inner>0, let's use the rendered model, otherwise just add random noise to the image.
         '''
         for b in range(len(self.bands)):
             if use_COADD_only:
@@ -698,17 +1028,23 @@ class MedsStamp:
                 bmask = copy.deepcopy(self.masklist[b][i])
                 bmask |= np.rot90(self.masklist[b][i])
     
-                try:
-                    self.imlist[b][i][bmask==0] += self.model_all_rendered[b][i][bmask==0]
-                    s0 = self.model_all_rendered[b][i].shape[0]
-                    self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]!=0.)])
-                                                                
-        
+                
+                self.imlist[b][i][bmask==0] += self.model_all_rendered[b][i][bmask==0]
+                s0 = self.model_all_rendered[b][i].shape[0]
+                rnd_ = np.random.normal(size = (s0,s0))
+                
+                self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]>0.)] += rnd_[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]>0.)]
+                
+                  
+                                                                                 
+                
+                '''
                 except:
                     s0 = self.imlist[b][i].shape[0]
                     self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]!=0.)])
-                                                                
-        
+                '''  
+                                                                                                    
+                del bmask
                     
                     
                 
@@ -752,7 +1088,11 @@ class MedsStamp:
            # '''
             if mask_exposure is not None:        
                 self.expnum_ccd =  [[ (self.ccd_name[b][i-1]-1000*b)+100*self.expnum[b][i-1]  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
-                self.explist_mask =  [[ ~((self.expnum_ccd[b][i-1] in mask_exposure[self.bands[b]]) & (self.expnum[b][i-1] in mask_exposure['all']))  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]
+
+                
+                # the first entry is a check on good exposures, the second on bad exposures.
+                self.explist_mask =  [[ ((self.expnum_ccd[b][i-1] in mask_exposure[self.bands[b]]) and (not(self.expnum[b][i-1] in mask_exposure['all'])))  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]
+
             else:
                 self.explist_mask = None
             
@@ -804,12 +1144,12 @@ class MedsStamp:
         
 
             
-    def measure_psf_HSM_moments(self,bands_weights = [], use_COADD_only = False):
+    def measure_psf_HSM_moments(self, bands_weights = [], use_COADD_only = False, do_it_for_the_image=False):
         
         psf_moments = np.zeros(4)
+        psf_moments_w = np.zeros(4)
         for b in range(len(self.bands)): 
-            psf_moments__ = np.zeros(4)
-            psf_moments__w = np.zeros(4)
+
             
             if use_COADD_only:
                 start = 0
@@ -822,53 +1162,125 @@ class MedsStamp:
                 y = self.orig_rowcol[b][i][0]+1
                 x = self.orig_rowcol[b][i][1]+1
 
-                img = galsim.Image(self.psf[b][i],copy=True)
-
-                jac = self.jaclist[b][i]
-                jac = galsim.JacobianWCS(dudx=jac['dudcol'], dudy=jac['dudrow'], dvdx=jac['dvdcol'], dvdy=jac['dvdrow'])
-
-
-                # calculate hsm moments -----
                 try:
-                    mom = galsim.hsm.FindAdaptiveMom(img)
-                    sigma = mom.moments_sigma
-                    shape = mom.observed_shape
-                    scale, shear, theta, flip = jac.getDecomposition()
-                    sigma *= scale
-                    # Fix shear.  First the flip, if any.
-                    if flip:
-                        shape = galsim.Shear(g1 = -shape.g1, g2 = shape.g2)
-                    # Next the rotation
-                    shape = galsim.Shear(g = shape.g, beta = shape.beta + theta)
-                    # Finally the shear
-                    shape = shear + shape
-                    e1 = shape.g1
-                    e2 =  shape.g2
+                #if 1==1:
+                    if do_it_for_the_image:
+                        img = galsim.Image(self.imlist[b][i]-self.model_rendered[b][i],copy=True)
+                    else:
+                        img = galsim.Image(self.psf[b][i],copy=True)
 
-                    ssq = sigma**2 / (1-e1**2-e2**2)**0.5
-                    M = [[(1+e1)*ssq, e2*ssq],[e2*ssq, (1-e1)*ssq]]
+                    jac = self.jaclist[b][i]
+                    jac = galsim.JacobianWCS(dudx=jac['dudcol'], dudy=jac['dudrow'], dvdx=jac['dvdcol'], dvdy=jac['dvdrow'])
 
 
-                    weight = bands_weights[b]
+                    # calculate hsm moments -----
+                    try:
+                    #if 1==1:
+                        mom = galsim.hsm.FindAdaptiveMom(img)
+                        sigma = mom.moments_sigma
+                        shape = mom.observed_shape
+                        scale, shear, theta, flip = jac.getDecomposition()
+                        sigma *= scale
+                        # Fix shear.  First the flip, if any.
+                        if flip:
+                            shape = galsim.Shear(g1 = -shape.g1, g2 = shape.g2)
+                        # Next the rotation
+                        shape = galsim.Shear(g = shape.g, beta = shape.beta + theta)
+                        # Finally the shear
+                        shape = shear + shape
+                        e1 = shape.g1
+                        e2 =  shape.g2
 
-                    psf_moments__ += np.array([weight*ssq,weight*M[0][0],weight*M[1][1],weight*M[0][1]])
-                    psf_moments__w += np.array([1,1,1,1])
+                        ssq = sigma**2 / (1-e1**2-e2**2)**0.5
+                        M = [[(1+e1)*ssq, e2*ssq],[e2*ssq, (1-e1)*ssq]]
+
+
+                        weight = bands_weights[b]
+
+                        psf_moments += np.array([weight*ssq,weight*M[0][0],weight*M[1][1],weight*M[0][1]])
+                        psf_moments_w += weight*np.array([1,1,1,1])
+                        #print (psf_moments,psf_moments_w)
+                    except:
+                        pass
                 except:
                     pass
-            psf_moments__ = psf_moments__/psf_moments__w
-            psf_moments+=psf_moments__
-            
+        psf_moments = psf_moments/psf_moments_w
+
         # compute psf ellipticities:    
         sigma_ = np.sqrt(np.sqrt(psf_moments[1]*psf_moments[2]-psf_moments[3]**2))
         e1_ = psf_moments[1]/psf_moments[0]-1
         e2_ = psf_moments[3]/psf_moments[0]
  
-        self.psf_hsm_moments = [sigma_,e1_,e2_]
+        if do_it_for_the_image:
+            self.psf_hsm_moments_obs = [sigma_,e1_,e2_]
+        else:
+            self.psf_hsm_moments = [sigma_,e1_,e2_]
 
         
    
             
-            
+    def number_of_good_exposures_per_band(self, use_COADD_only=False):
+        '''
+        Calculates the number of good exposures for each band in the dataset.
+
+        Parameters:
+        use_COADD_only (bool): If True, the function only considers co-added exposures.
+                               If False, it considers all exposures except the co-added ones.
+
+        Returns:
+        np.ndarray: An array containing the number of good exposures per band.
+
+        The function goes through each band and evaluates certain criteria to determine
+        if an exposure is 'good'. These criteria involve various flags indicating the 
+        quality or usability of the exposure.
+        '''
+
+        # Initialize an array to count good exposures for each band
+        bands_good_exposures = np.zeros(len(self.bands)).astype(int)
+        bands_bad_exposures = np.zeros(len(self.bands)).astype(int)
+
+        # Iterate over each band
+        for index_band, band in enumerate(self.bands):
+            # Determine the range of exposures to consider based on the use_COADD_only flag
+            if use_COADD_only:
+                start, end = 0, 1
+            else:
+                start, end = 1, self.ncutout[index_band]
+
+            # Iterate over each exposure within the specified range
+            for exp in range(start, end):
+                compute = True  # Initialize a flag to determine if the exposure is good
+
+                # Check various conditions to see if the exposure should be counted
+
+                # If mfrac_flag for this exposure is True, skip the exposure
+                if self.mfrac_flag[index_band][exp]:
+                    pass
+                else:
+                    compute = compute & False
+
+                # If explist_mask is not None and the mask for this exposure is True, skip it
+                if self.explist_mask is not None:
+                    if self.explist_mask[index_band][exp - 1]:
+                        pass
+                    else:
+                        compute = compute & False
+
+                # If flag_rendered_models for this exposure is True, skip the exposure
+                if self.flag_rendered_models[index_band][exp]:
+                    pass
+                else:
+                    compute = compute & False
+
+                # If all conditions are met (compute is still True), count this as a good exposure
+                if compute:
+                    bands_good_exposures[index_band] += 1
+                else:
+                    bands_bad_exposures[index_band] += 1
+                    
+
+        # Return the count of good exposures for each band
+        return bands_good_exposures   , bands_bad_exposures       
             
     def return_orig_coordinates(self):
         '''
@@ -893,52 +1305,65 @@ class MedsStamp:
             
             
             
-    def subtract_background(self):
+    def subtract_background(self, use_COADD_only = False):
         '''
         Recomputes and subtracts the background from the image based on the outermost pixels.
         This method is used for background noise reduction.
         '''
         
+         
+
+
         bkg_tot = 0
         count = 0
         len_v = 0
-        for b in range(len(self.bands)):
-            for i in range((self.ncutout[b])):
+
+        for b, band in enumerate(self.bands):
+            if use_COADD_only:
+                start = 0
+                end = 1
+            else:
+                start = 1
+                end = self.ncutout[b]
+
                 
-                
-                    seg = copy.deepcopy(self.seglist[b][i])
-                    segg0 = copy.deepcopy(self.seglist[b][i])
-                    for ii in [-5,-4,-3,-2,-1,0,1,2,3,4,5]:
-                        seg += (np.roll(segg0, ii, axis = 0) + np.roll(segg0, ii, axis = 1))
+            for i in range(start,end):
 
-                    mask__ = copy.deepcopy(self.masklist[b][i] )
-                    segg0 = copy.deepcopy(self.masklist[b][i] )
-                    for ii in [-5,-4,-3,-2,-1,0,1,2,3,4,5]:
-                        mask__ += (np.roll(segg0, ii, axis = 0) + np.roll(segg0, ii, axis = 1))
+            
+                try:
+                    mask_cond = (self.masklist[b][i] == 0 ) & (self.model_all_rendered[b][i]<0.01*self.noise_rms[b][i])
+                except:
+               
+                    mask_cond = ( self.masklist[b][i] == 0 )
+                    
+                    
+                #mask_cond = (self.model_all_rendered[b][i]>0.01*self.noise_rms[b][i])
+                    
+                # Update mask condition
+                maskarr = np.ones_like(mask_cond, dtype='int')
+                maskarr[~mask_cond] = 0
+                uu = 6
+                maskarr[uu:-uu, uu:-uu] = 0
 
+                try:
+                    v = (self.imlist[b][i]-self.model_all_rendered[b][i])[np.where(maskarr==1)]
+                except:
+                    print (b,i)
+                    v = (self.imlist[b][i])[np.where(maskarr==1)]
 
-                    mask = (seg == 0) & (mask__ == 0) 
-                    maskarr=np.ones(np.shape(mask),dtype='int')
-                    maskarr[~mask] = 0
-                    uu = 6
-                    maskarr[uu:-uu,uu:-uu]=0
-                    v = self.imlist[b][i][np.where(maskarr==1)]
+                if len(v) > 50:
+                    correction = np.median(v)
+                    self.imlist[b][i] -= correction
+                    bkg_tot += correction
+                    count += 1
+                    len_v += len(v)
 
-                    if len(v)>50: 
-                        correction = np.median(v)
-                        self.imlist[b][i] -= correction
-                        bkg_tot += correction
-                        count += 1
-                        len_v += len(v)               
-                        
-        if count ==0:
+        if count == 0:
             self.bkg = bkg_tot
             self.pixel_used_bkg = 1e10
         else:
-            self.bkg = bkg_tot/count
-            self.pixel_used_bkg = len_v/count
-
-            
+            self.bkg = bkg_tot / count
+            self.pixel_used_bkg = len_v / count            
             
             
             
