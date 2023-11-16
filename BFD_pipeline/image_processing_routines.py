@@ -8,10 +8,31 @@ import bfd
 import copy
 import bfd
 from bfd import momentcalc as mc
+from bfd.momentcalc import MomentCovariance
 from bfd.keywords import *
 import glob        
 import os
 import timeit
+
+
+
+def grid_search(resolution):
+        # Generate all possible combinations of r, i, z with the given resolution
+        r = np.arange(0, 1 + resolution, resolution)
+        i = np.arange(0, 1 + resolution, resolution)
+        z = np.arange(0, 1 + resolution, resolution)
+
+        valid_combinations = []
+
+        for r_val in r:
+            for i_val in i:
+                for z_val in z:
+                    if z_val:
+                        if np.isclose(r_val + i_val + z_val, 1.0):
+                            valid_combinations.append((int(r_val*1000)/1000.,int(i_val*1000)/1000.,int(z_val*1000)/1000.))
+
+        return valid_combinations
+    
 
 def collapse(path, output_label):
     '''
@@ -219,6 +240,11 @@ def save_moments_targets(self,fitsname):
 
         col.append(fits.Column(name="moments",format="5E",array=np.array(self.moment)))  
         col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
+        col.append(fits.Column(name="covariance_psf_obs",format="15E",array=np.array(self.cov_psf_obs).astype(np.float32)))
+        
+            
+        
+        
         col.append(fits.Column(name="psf_moments",format="4E",array=self.psf_moment))
         col.append(fits.Column(name="psf_moment_obs",format="4E",array=self.psf_moment_obs))
         col.append(fits.Column(name="psf_hsm_moments",format="3E",array=self.psf_hsm_moment))
@@ -865,8 +891,11 @@ class MedsStamp:
                              pixel_noiselist = noise_array, bandlist = band_array,
                              pad_factor=FFT_pad_factor, psf_recenter_sigma = 2.)
         
+        
         # Compute PSF moments, for diagnosticss
-                    
+             
+        wcs_array_corrected = []
+        delta_stamp_array = []
         for i in range(len(kds)):
             nominal = np.array(psf_array[i].shape) // 2
             #psf_shift = bfd.momentcalc.xyWin(psf_array[i], sigma=2, nominal=nominal)
@@ -877,28 +906,25 @@ class MedsStamp:
             
             wcs_psf = wcs_array[i]
             wcs_psf.xy0 = (nominal+[psf_shifts[i][1],psf_shifts[i][0]])
-
+            wcs_array_corrected.append(wcs_psf)
 
             delta_stamp = np.zeros_like(psf_array[i])
             delta_stamp[nominal[0],nominal[1]] = 1.
-
-            psf_kd, _  = bfd.multiImage([psf_array[i]], (0,0), [delta_stamp], [wcs_psf], 
-                     pixel_noiselist = [noise_array[i]], bandlist = ['x'],
-                     pad_factor=FFT_pad_factor) #, psf_recenter_sigma = 2.)
-
-            psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = {'bands':['x'],'weights':[1.]})
-
-
-            Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
-            psf_moments += np.array([Mf,Mr,M1,M2])*bands_weights[index_band]
-            psf_weights += bands_weights[index_band]
+            delta_stamp_array.append(delta_stamp)
             
-            #'''
-        
-        self.psf_moments  = psf_moments / psf_weights   
-        
-        
+
+   
+        psf_kd, _  = bfd.multiImage(psf_array, (0,0), delta_stamp_array, wcs_array_corrected, 
+                     pixel_noiselist = noise_array, bandlist = band_array,
+                     pad_factor=FFT_pad_factor) 
+            
+     
         bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
+        psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
+        Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
+        self.psf_moments  = np.array([Mf,Mr,M1,M2])
+        
+
 
         multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
         self.xyshift, error,msg = multi_moment.recenter()
@@ -924,6 +950,7 @@ class MedsStamp:
         wcs_array = []
         noise_array = []
         band_array = []
+        delta_stamp_array = []
         
         psf_moments = np.zeros(4)
         psf_weights = 0
@@ -956,7 +983,6 @@ class MedsStamp:
                     
                 if compute:
                     images_array.append(self.imlist[index_band][exp] - self.model_rendered[index_band][exp])
-                    psf_array.append(self.psf[index_band][exp] )
                     
                     noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
                     noise_array.append(noise_rms)
@@ -965,46 +991,34 @@ class MedsStamp:
                     
                     wcs_array.append(self.wcslist[index_band][exp])
                         
-              
-        # Compute PSF moments, for diagnosticss
-                    
-        for i in range(len(psf_array)):
-            nominal = np.array(psf_array[i].shape) // 2
-            psf_shift = bfd.momentcalc.xyWin(psf_array[i], sigma=2, nominal=nominal)
-            origin = (0.,0.)
+                    nominal = np.array(self.imlist[index_band][exp].shape) // 2
+                    delta_stamp = np.zeros_like(self.imlist[index_band][exp])
+                    delta_stamp[nominal[0],nominal[1]] = 1.
+                    delta_stamp_array.append(delta_stamp)
 
-                        
-            #wcs_psf = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
+
+        psf_kd, _  = bfd.multiImage(images_array, (0,0), delta_stamp_array, wcs_array, 
+                     pixel_noiselist = noise_array, bandlist = band_array,
+                     pad_factor=FFT_pad_factor) 
             
-            wcs_psf = wcs_array[i]
-            wcs_psf.xy0 = (nominal+[psf_shift[1],psf_shift[0]])
-
-
-            delta_stamp = np.zeros_like(psf_array[i])
-            delta_stamp[nominal[0],nominal[1]] = 1.
-
-            psf_kd, _  = bfd.multiImage([images_array[i]], (0,0), [delta_stamp], [wcs_psf], 
-                     pixel_noiselist = [noise_array[i]], bandlist = ['x'],
-                     pad_factor=FFT_pad_factor) #, psf_recenter_sigma = 2.)
-
-            psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = {'bands':['x'],'weights':[1.]})
-
-
-            Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
-            psf_moments += np.array([Mf,Mr,M1,M2])*bands_weights[index_band]
-            psf_weights += bands_weights[index_band]
             
-            #'''
-        
-        self.psf_moments_observed  = psf_moments / psf_weights   
-        
+        bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
+        psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
+        psf_moment.recenter()
+        Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
+        self.psf_moments_observed  = np.array([Mf,Mr,M1,M2])
+
+        covm_even,covm_odd , covm_even_all , _ = psf_moment.get_covariance(returnbands=True)
+        covgal = MomentCovariance(covm_even,covm_odd)
+                
+        self.psf_moments_observed_cov  = covgal.pack()
 
         
     def compute_noise(self):
         '''
         Computes the noise level in the image based on weight maps and masks.
         '''
-        self.noise_rms =  [[np.sqrt(1./np.median(self.wtlist[b][i][(self.wtlist[b][i]!= 0.) & (self.masklist[b][i] == 0)])) for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
+        self.noise_rms =  [[np.sqrt(1./np.median(self.wtlist[b][i][(self.wtlist[b][i]> 0.) & (self.masklist[b][i] == 0)])) for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
         
  
             
@@ -1013,7 +1027,7 @@ class MedsStamp:
         '''
         Processes the bitmask of the image to handle masked or bad pixels.
         - use_COADD_only: Flag to consider only the coadded image.
-        
+
         #if mfrac_inner>0, let's use the rendered model, otherwise just add random noise to the image.
         '''
         for b in range(len(self.bands)):
@@ -1024,31 +1038,23 @@ class MedsStamp:
                 start = 1
                 end = self.ncutout[b]            
             for i in range(start, end):  
-                    
+
                 bmask = copy.deepcopy(self.masklist[b][i])
                 bmask |= np.rot90(self.masklist[b][i])
-    
-                
-                self.imlist[b][i][bmask==0] += self.model_all_rendered[b][i][bmask==0]
+
+
+                self.imlist[b][i][bmask!=0] = self.model_all_rendered[b][i][bmask!=0]
                 s0 = self.model_all_rendered[b][i].shape[0]
                 rnd_ = np.random.normal(size = (s0,s0))
-                
-                self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]>0.)] += rnd_[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]>0.)]
-                
-                  
-                                                                                 
-                
-                '''
-                except:
-                    s0 = self.imlist[b][i].shape[0]
-                    self.imlist[b][i][(bmask==0) & (self.wtlist[b][i]!=0.)] += (np.random.normal(size = (s0,s0))[(bmask==0) & (self.wtlist[b][i]!=0.)]/np.sqrt(self.wtlist[b][i])[(bmask==0) & (self.wtlist[b][i]!=0.)])
-                '''  
-                                                                                                    
-                del bmask
-                    
-                    
-                
-                                                 
+
+                self.imlist[b][i][(bmask!=0) & (self.wtlist[b][i]>0.)] += rnd_[(bmask!=0) & (self.wtlist[b][i]>0.)]/np.sqrt(self.wtlist[b][i])[(bmask!=0) & (self.wtlist[b][i]>0.)]
+
+                ave_noise = np.sqrt(np.median(self.wtlist[b][i][self.wtlist[b][i]>0.]))
+                self.imlist[b][i][self.wtlist[b][i]<=0.] += rnd_[(self.wtlist[b][i]<=0.)]/ave_noise
+
+
+
+
         
         
     def Load_MEDS(self, index, meds_array = [], mask_exposure = None):
