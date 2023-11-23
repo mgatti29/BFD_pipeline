@@ -2,7 +2,7 @@ import yaml
 from yaml import Loader
 import os
 from .measure_moments_targets import measure_moments_targets
-
+from .measure_moments_templates import measure_moments_templates
 
 def BFD_pipeline(config):
     """
@@ -53,12 +53,20 @@ def BFD_pipeline(config):
             os.mkdir(config['general']['output_folder']+'/targets/')
         except:
             pass 
-                
+    if not os.path.exists(config['general']['output_folder']+'/templates/'):
+        try:
+            os.mkdir(config['general']['output_folder']+'/templates/')
+        except:
+            pass 
+                         
     #Add the general keys to all the other submodules
-    for key1 in ['measure_moments_targets']:
+    for key1 in ['measure_moments_templates','measure_moments_targets',]:
         if key1 != 'general':
             for key2 in config['general'].keys():
-                config[key1][key2] = config['general'][key2]
+                try:
+                    config[key1][key2] = config['general'][key2]
+                except:
+                    pass
 
                 
     #Let's run the individual modules.
@@ -68,6 +76,13 @@ def BFD_pipeline(config):
                 measure_moments_targets(**config['measure_moments_targets'])
             
 
+    if config['run']!= None:
+        for entry in config['run']:
+            if entry == 'measure_moments_templates':  
+                measure_moments_templates(**config['measure_moments_templates'])
+            
+ 
+            
             
 def read_config(file_name):
     """Read a configuration dictionary from a file

@@ -5,6 +5,7 @@ import meds
 import ngmix
 import frogress
 from .image_processing_routines import CollectionOfImages,MedsStamp,GalaxyModelsTable,check_on_exposures,save_moments_targets,collapse,grid_search
+
 import bfd
 from bfd.momenttable import TargetTable
 from bfd.momentcalc import MomentCovariance
@@ -39,7 +40,9 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
         # let's check if we want to save the observed moments of the reserved stars as well
         if config['reserved_stars_list']:
-            reserved_stars_id = np.load('/global/u2/m/mgatti/BFD_pipeline/data/coadd_id_reserved_stars.npy',allow_pickle=True)
+            reserved_stars_id = np.load(config['reserved_stars_list'])
+            reserved_stars_id = np.array(reserved_stars_id['arr_0'])
+
             Collection_of_wide_field_galaxies.reserved_star_flag = np.in1d( np.array(Collection_of_wide_field_galaxies.coadd_IDs)  , reserved_stars_id)
         else:
             Collection_of_wide_field_galaxies.reserved_star_flag = np.array([False]*meds_array[0].size)
@@ -106,16 +109,17 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
 
             if config['debug']:
-                image_storage[meds_index] = dict()
-                for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].n_bands):
-                    start = 1
-                    end = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].ncutout[index_band]
-                    image_storage[meds_index][index_band] = dict()
-                    for exp in range(start, end):  
-                        image_storage[meds_index][index_band][exp] = {'raw_image':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp],
-                                                                      'psf':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf[index_band][exp]}
- 
-                                
+                #if Collection_of_wide_field_galaxies.reserved_star_flag[meds_index]:
+                    image_storage[meds_index] = dict()
+                    for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].n_bands):
+                        start = 1
+                        end = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].ncutout[index_band]
+                        image_storage[meds_index][index_band] = dict()
+                        for exp in range(start, end):  
+                            image_storage[meds_index][index_band][exp] = {'raw_image':copy.deepcopy(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp]),
+                                                                          'psf':Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf[index_band][exp]}
+
+
                                 
             # check masked bands and only consider objects with N bands not masked
             bands_not_masked = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].check_stamp_masked_frac(limit=config['max_frac_stamp_masked'])
@@ -175,17 +179,22 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
                         
                         if config['debug']:
-                        
-                            for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].n_bands):
-                                start = 1
-                                end = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].ncutout[index_band]
-                                
-                                for exp in range(start, end):  
-                                    image_storage[meds_index][index_band][exp]['image_after_processing'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp]
-                                    image_storage[meds_index][index_band][exp]['model_rendered'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_rendered[index_band][exp]
-                                    image_storage[meds_index][index_band][exp]['model_all_rendered'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_all_rendered[index_band][exp]
-                          
-                        
+                            #if Collection_of_wide_field_galaxies.reserved_star_flag[meds_index]:
+                                for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].n_bands):
+                                    start = 1
+                                    end = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].ncutout[index_band]
+
+                                    for exp in range(start, end):  
+                                        image_storage[meds_index][index_band][exp]['image_after_processing'] = copy.deepcopy(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp])
+                                        image_storage[meds_index][index_band][exp]['model_rendered'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_rendered[index_band][exp]
+                                        image_storage[meds_index][index_band][exp]['model_all_rendered'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_all_rendered[index_band][exp]
+                                        
+                                        image_storage[meds_index][index_band][exp]['noise_rms'] =copy.deepcopy(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].noise_rms[index_band][exp])
+                                        image_storage[meds_index][index_band][exp]['mask'] =copy.deepcopy(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].masklist[index_band][exp])
+                                        image_storage[meds_index][index_band][exp]['psf'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf[index_band][exp]
+                                        image_storage[meds_index][index_band][exp]['mfrac'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].mfrac_per_band
+                                        image_storage[meds_index][index_band][exp]['bkg'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].bkg
+
                         # Compute moments
                  
                         try:
@@ -242,52 +251,56 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                 
                                 meb_ = np.array([m_.even for m_ in meb])
                                 meb = meb_[:,0]
-                                # get new centers
-                                newcent=np.array([Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].image_ra, Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].image_dec])[:,0]+ Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].xyshift/3600.0
-
-
-                                # add info to the targets table.
-                                tab_targets.add(mom, xy=newcent,id=Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].coadd_ID[0],covgal=MomentCovariance(covm_even,covm_odd))
-
-
-
-                                #Let's add quantities to the targets tab.
-                                tab_targets.psf_moment.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments)
-                                tab_targets.psf_hsm_moment.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments)
-                                tab_targets.DESDM_coadd_y.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].DESDM_coadd_y[0])
-                                tab_targets.DESDM_coadd_x.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].DESDM_coadd_x[0])
-                                tab_targets.bkg.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].bkg)
-                                tab_targets.pixel_used_bkg.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].pixel_used_bkg)
-                                tab_targets.cov_Mf_per_band.append(covm_even_all[0][0,0])
-                                tab_targets.meb.append(meb)
-
-                                orig_row_flattened,orig_col_flattened, ccd_name_flattened = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].return_orig_coordinates()
-                                tab_targets.orig_row.append(orig_row_flattened)
-                                tab_targets.orig_col.append(orig_col_flattened)
-                                tab_targets.ccd_name.append(ccd_name_flattened)
-                                tab_targets.mfrac_per_band.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].mfrac_per_band)
-
-                                tab_targets.bad_exposures.append(number_of_bad_exposures_per_band)
-                                tab_targets.good_exposures.append(number_of_good_exposures_per_band)
-
-
                                 
-                                
-
-                                try:
-                                    tab_targets.psf_moment_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed)
-                                    # add also covariance of these guys
-                                    tab_targets.cov_psf_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed_cov)
-                                    #
-                                except:
-                                    tab_targets.psf_moment_obs.append(np.zeros(4))
-                                    tab_targets.cov_psf_obs.append(np.zeros(15))
+                                # check on band fluxes:
+                                if np.sum(meb/np.sqrt( covm_even_all[0,0,:]) > -4.):
                                     
+                                    # get new centers
+                                    newcent=np.array([Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].image_ra, Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].image_dec])[:,0]+ Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].xyshift/3600.0
 
-                                try:
-                                    tab_targets.psf_hsm_moments_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments_obs)
-                                except:
-                                    tab_targets.psf_hsm_moments_obs.append(np.zeros(3))
+
+                                    # add info to the targets table.
+                                    tab_targets.add(mom, xy=newcent,id=Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].coadd_ID[0],covgal=MomentCovariance(covm_even,covm_odd))
+
+
+
+                                    #Let's add quantities to the targets tab.
+                                    tab_targets.psf_moment.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments)
+                                    tab_targets.psf_hsm_moment.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments)
+                                    tab_targets.DESDM_coadd_y.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].DESDM_coadd_y[0])
+                                    tab_targets.DESDM_coadd_x.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].DESDM_coadd_x[0])
+                                    tab_targets.bkg.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].bkg)
+                                    tab_targets.pixel_used_bkg.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].pixel_used_bkg)
+                                    tab_targets.cov_Mf_per_band.append(covm_even_all[0,0,:])
+                                    tab_targets.meb.append(meb)
+
+                                    orig_row_flattened,orig_col_flattened, ccd_name_flattened = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].return_orig_coordinates()
+                                    tab_targets.orig_row.append(orig_row_flattened)
+                                    tab_targets.orig_col.append(orig_col_flattened)
+                                    tab_targets.ccd_name.append(ccd_name_flattened)
+                                    tab_targets.mfrac_per_band.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].mfrac_per_band)
+
+                                    tab_targets.bad_exposures.append(number_of_bad_exposures_per_band)
+                                    tab_targets.good_exposures.append(number_of_good_exposures_per_band)
+
+
+
+
+
+                                    try:
+                                        tab_targets.psf_moment_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed)
+                                        # add also covariance of these guys
+                                        tab_targets.cov_psf_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed_cov)
+                                        #
+                                    except:
+                                        tab_targets.psf_moment_obs.append(np.zeros(4))
+                                        tab_targets.cov_psf_obs.append(np.zeros(15))
+
+
+                                    try:
+                                        tab_targets.psf_hsm_moments_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments_obs)
+                                    except:
+                                        tab_targets.psf_hsm_moments_obs.append(np.zeros(3))
 
 
                                 t11 = timeit.default_timer()
@@ -335,9 +348,12 @@ def run_chunk(chunk,config, tile, dictionary_runs):
         save_moments_targets(tab_targets,config['output_folder']+'/targets/targets_{0}_chunk_{1}.fits'.format(tile,chunk))
 
 
+    if config['debug_SN']:
+        np.save(config['output_folder']+'/targets/sn_array_for_debugging_{0}_chunk_{1}'.format(tile,chunk),sn_array)
 
+        
     if config['debug']:
-        image_storage['sn_array'] = sn_array
+        #image_storage['sn_array'] = sn_array
         np.save(config['output_folder']+'/targets/images_for_debugging_{0}_chunk_{1}'.format(tile,chunk),image_storage)
 
             

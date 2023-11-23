@@ -1,0 +1,50 @@
+#srun --nodes=1 --tasks-per-node=128 --cpus-per-task=2 --cpu-bind=cores python ./run_bfd.py --config ./config/config_measure_target_moments_only.yaml --tiles DES0009-6248 --output_label _run1
+
+#srun --nodes=1 --tasks-per-node=128 --cpus-per-task=2 --cpu-bind=cores python ./run_bfd.py --config ./config/config_measure_target_moments_only.yaml --tiles DES0002-4206 --output_label _run1
+
+#srun --nodes=1 --tasks-per-node=128 --cpus-per-task=2 --cpu-bind=cores python ./run_bfd.py --config ./config/config_measure_target_moments_only.yaml  --output_label _run1
+
+
+#srun --nodes=4 --tasks-per-node=2  python ./run_bfd.py --config ./config/config_measure_template_moments_only.yaml 
+run:
+     - measure_moments_templates
+
+######################################################################
+#                       general config
+######################################################################
+
+general:
+    output_folder:  '/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp_0.65_fiducial/'
+    
+    # BFD window function parameters. Defaults: n = 4, sigma = 0.65
+    filter_sigma: 0.65 #65  
+    
+    # per-band weights.
+    bands_meds_files: ['g','r','i','z']
+    bands_weights: [0.,0.6,0.3,0.1]
+
+    # pad factor for the FFT of the images. Default: 2. 
+    FFT_pad_factor: 2.
+    
+    # whether if you want to use MPI or not.
+    MPI: True
+
+        
+######################################################################
+#                       measure_moments_targets
+######################################################################
+
+measure_moments_templates:
+
+        max_frac_stamp_masked: 0.05
+        path_MEDS: '/global/cfs/cdirs/des/BFD_Y6/deep_fields_coadd_PIFF/'
+        desy3_DF: '/global/cfs/cdirs/des/BFD_Y6/deep_fields_coadd/deep_fields_y3kp2.h5'
+        path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/data/fitdv_df_collated/'
+       # path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/data/fitdv_ref/'
+        debug: False
+        debug_SN : False
+        fields: ['SN-E2'] #'COSMOS_UltraVISTA_Willv2'] #,'SN-E2', 'SN-X3','SN-C3'] #'COSMOS_UltraVISTA_Willv2'] #, 'SN-C3', 'SN-E2', 'SN-X3']
+        tiles: ['SN-E2_C22_r3688p02']
+            
+        
+        
