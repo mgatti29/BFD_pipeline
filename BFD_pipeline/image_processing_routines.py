@@ -29,7 +29,10 @@ def grid_search(resolution):
                 for z_val in z:
                     if z_val:
                         if np.isclose(r_val + i_val + z_val, 1.0):
-                            valid_combinations.append((int(r_val*1000)/1000.,int(i_val*1000)/1000.,int(z_val*1000)/1000.))
+                            if z_val<0.3:
+                                if i_val<0.8:
+                                    if r_val<0.8:
+                                        valid_combinations.append((int(r_val*1000)/1000.,int(i_val*1000)/1000.,int(z_val*1000)/1000.))
 
         return valid_combinations
     
@@ -220,7 +223,42 @@ def check_on_exposures(meds_array, exposure_list,bands):
     return mask_exposure
 
 
+def real_space_smoothing(x0, y0, shape, width=1.):
+    """
+    Create a real space smoothing kernel.
 
+    This function generates a smoothing kernel based on cosine function, 
+    typically used in image processing or data smoothing. The kernel 
+    gradually transitions from a full weight to zero weight beyond 
+    a specified radius.
+
+    Parameters:
+    x0, y0 (float): Coordinates of the center point for the kernel.
+    shape (int): The size of the output square array (kernel).
+    width (float): Scaling factor for the radius, default is 1.
+
+    Returns:
+    numpy.ndarray: A 2D array representing the smoothing kernel.
+    """
+
+    # Creating 1D arrays for x and y coordinates centered around 0
+    x = np.arange(-shape//2, shape//2)
+    y = np.arange(-shape//2, shape//2)
+
+    # Creating 2D grids for x and y coordinates, shifted to center at (x0, y0)
+    xx, yy = np.meshgrid(x - (x0 - shape//2), y - (y0 - shape//2))
+
+    # Calculating the radius from the center (x0, y0) for each point in the grid
+    rr = width * np.sqrt(xx**2 + yy**2)
+
+    # Applying a smoothing function based on the radius
+    # For radius < 10, the weight is 1 (full weight)
+    # For radius between 10 and 20, the weight transitions using a cosine function
+    # For radius > 20, the weight is 0 (no weight)
+    real_weight = np.where(rr < 10, 1, 0.5 * (1 - np.cos(2 * np.pi * rr / (0.5 * 2 * 20))))
+    real_weight = np.where(rr > 20, 0, real_weight)
+
+    return real_weight
 
 
 
@@ -324,7 +362,7 @@ class GalaxyModelsTable:
         select_obj_by_ID(ID): Returns the indices where the given ID matches the id_array.
     """
 
-    def __init__(self, path, this_is_wide_field=True):
+    def __init__(self, path):
         """
         Initializes the GalaxyModelsTable object, loading data from a FITS file.
 
@@ -332,8 +370,8 @@ class GalaxyModelsTable:
             path (str): The file path to the FITS file containing galaxy model data.
             this_is_wide_field (bool, optional): Indicates if the data is from a wide field. Defaults to True.
         """
+
         self.catalog = fits.open(path)
-        self.this_is_wide_field = this_is_wide_field
         self.cols = self.catalog[1].data.columns.names
         self.id_epoch_array = self.catalog[2].data['id']
         self.id_array = self.catalog[1].data['id']
@@ -352,48 +390,23 @@ class GalaxyModelsTable:
         """Returns the indices of epochs with the specified ID."""
         return np.where(self.id_epoch_array == ID)
 
-    def return_band_val_deep_fields(self,bandind,indtostr=True):
-        if indtostr:
-            if self.numbands==5:
-                if bandind==0: return 'u'
-                if bandind==1: return 'g'
-                if bandind==2: return 'r'
-                if bandind==3: return 'i'
-                if bandind==4: return 'z'
-            if self.numbands==4:
-                if bandind==0: return 'g'
-                if bandind==1: return 'r'
-                if bandind==2: return 'i'
-                if bandind==3: return 'z'
-            if self.numbands==3:
-                if bandind==0: return 'J'
-                if bandind==1: return 'H'
-                if bandind==2: return 'Ks'
-        else:
-            if self.numbands==5:
-                if bandind=='u': return 0
-                if bandind=='g': return 1
-                if bandind=='r': return 2
-                if bandind=='i': return 3
-                if bandind=='z': return 4
-            if self.numbands==4:
-                if bandind=='g': return 0
-                if bandind=='r': return 1
-                if bandind=='i': return 2
-                if bandind=='z': return 3
-            if self.numbands==3:
-                if bandind=='J':  return 0
-                if bandind=='H':  return 1
-                if bandind=='Ks': return 2
+
     
-    def return_band_val_wide_field(self,bandind,indtostr=True):
+    def return_band_val(self,bandind,indtostr=True):
         if indtostr:
+            # this is for wide field
             if self.numbands==5:
                 if bandind==0: return 'g'
                 if bandind==1: return 'r'
                 if bandind==2: return 'i'
                 if bandind==3: return 'z'
                 if bandind==4: return 'Y'
+           # this is for deep field
+            elif self.numbands==4:
+                if bandind==0: return 'g'
+                if bandind==1: return 'r'
+                if bandind==2: return 'i'
+                if bandind==3: return 'z'
         else:
             if self.numbands==5:
 
@@ -402,7 +415,11 @@ class GalaxyModelsTable:
                 if bandind=='i': return 2
                 if bandind=='z': return 3
                 if bandind=='Y': return 4
-            
+            elif self.numbands==4:
+                if bandind=='g': return 0
+                if bandind=='r': return 1
+                if bandind=='i': return 2
+                if bandind=='z': return 3
 
     def return_model(self, band='i', pos=None, pos_epoch=None, shredder=False):
         """
@@ -417,10 +434,9 @@ class GalaxyModelsTable:
         Returns:
             dict: A dictionary containing 'gal_pars' and 'psf_pars' for the galaxy.
         """
-        if self.this_is_wide_field:
-            index_band = self.return_band_val_wide_field(band, indtostr=False)
-        else:
-            index_band = self.return_band_val_deep_fields(band, indtostr=False)
+        index_band = self.return_band_val(band, indtostr=False)
+        #else:
+        #    index_band = self.return_band_val_deep_fields(band, indtostr=False)
 
         gal_pars = self.bdf_params[pos][0:6]
         gal_pars = np.append(gal_pars, self.bdf_flux[pos][index_band])
@@ -730,8 +746,21 @@ class MedsStamp:
         #ed = timeit.default_timer()
         #
         
+        # check the size of the stamps
+        sizes = []
+        for b in range(len(self.bands)):
+            for i in range((self.ncutout[b])):
+                sizes.append(self.wtlist[b][i].shape[0])
+        min_size = min(np.array(sizes))
         
-        Gaussian_weight = galsim.Gaussian(fwhm=2).drawImage(nx=40,ny=40, scale=0.263)
+        # size of Gaussian
+        if min_size>40:
+            size = 40
+        elif min_size>30:
+            size = 30
+        elif min_size>20:
+            size = 20
+        Gaussian_weight = galsim.Gaussian(fwhm=2).drawImage(nx=size,ny=size, scale=0.263)
         Gaussian_weight.setCenter(0,0)
 
         mfrac = []
@@ -741,11 +770,13 @@ class MedsStamp:
             mfrac_inner_ = []
             for i in range((self.ncutout[b])):
 
+                self.wtlist[b][i]
+                
                 shape = self.imlist[b][i].shape
 
                 # add max()
-                slice1 = slice((shape[0]-40)//2, shape[0]- (shape[0]-40)//2)
-                slice2 = slice((shape[0]-40)//2, shape[0]- (shape[0]-40)//2)
+                slice1 = slice((shape[0]-size)//2, shape[0]- (shape[0]-size)//2)
+                slice2 = slice((shape[0]-size)//2, shape[0]- (shape[0]-size)//2)
                 mask_ = ((self.wtlist[b][i][slice1,slice2]==0.) | (self.masklist[b][i][slice1,slice2] != 0.))
                 mfrac_.append(np.sum((Gaussian_weight.array)[mask_])/np.sum((Gaussian_weight.array)))
                 
@@ -762,17 +793,23 @@ class MedsStamp:
                 
                 
   
-        mfrac_per_band = []
-        for b in range(len(self.bands)):
-            mfrac_per_band.append(np.mean(np.array(self.mfrac[b])))
-        self.mfrac_per_band = mfrac_per_band
+        #mfrac_per_band = []
+        #for b in range(len(self.bands)):
+        #    mfrac_per_band.append(np.mean(np.array(self.mfrac[b])))
+        #self.mfrac_per_band = mfrac_per_band
         bands_not_masked = dict()
+        mfrac_per_band = np.zeros(len(self.bands))
+        
+        mfrac_per_band_w = np.zeros(len(self.bands))
         for b in range(len(self.bands)):
             bands_not_masked[self.bands[b]] = True
             if use_COADD_only:
                 if (self.mfrac[b][0] > limit):
                     bands_not_masked[self.bands[b]] = False
                     self.mfrac_flag[b][0] = False
+                else:
+                    mfrac_per_band[b] += self.mfrac[b][0]
+                    mfrac_per_band_w[b] += 1
             else:
                 bands_not_masked[self.bands[b]] = False
                 for i in range(1, self.ncutout[b]):  #MG *******+
@@ -781,7 +818,13 @@ class MedsStamp:
                         self.mfrac_flag[b][i] = False
                     else:
                         bands_not_masked[self.bands[b]] = True
+                        
+                        mfrac_per_band[b] += self.mfrac[b][0]
+                        mfrac_per_band_w[b] += 1
                   
+        self.mfrac_per_band = (mfrac_per_band/mfrac_per_band_w)
+        self.mfrac_per_band[mfrac_per_band_w==0] = -1.
+        
         bands_not_masked_list = []
         for b in bands_not_masked.keys():
             if bands_not_masked[b]:
@@ -845,8 +888,12 @@ class MedsStamp:
                     
                 if compute:
                     good_exposures += 1
-                    images_array.append(self.imlist[index_band][exp] - self.model_rendered[index_band][exp])
-                    psf_array.append(self.psf[index_band][exp] )
+                    img = self.imlist[index_band][exp] - self.model_rendered[index_band][exp]
+                    
+
+                    images_array.append(img)
+                    
+                    psf_array.append( self.psf[index_band][exp])
                     
                     noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
                     noise_array.append(noise_rms)
@@ -896,14 +943,13 @@ class MedsStamp:
              
         wcs_array_corrected = []
         delta_stamp_array = []
+        psf_array_2 = []
         for i in range(len(kds)):
             nominal = np.array(psf_array[i].shape) // 2
-            #psf_shift = bfd.momentcalc.xyWin(psf_array[i], sigma=2, nominal=nominal)
             origin = (0.,0.)
 
                         
-            #wcs_psf = bfd.WCS(duv_dxy,xyref=cent,uvref=origin)
-            
+
             wcs_psf = wcs_array[i]
             wcs_psf.xy0 = (nominal+[psf_shifts[i][1],psf_shifts[i][0]])
             wcs_array_corrected.append(wcs_psf)
@@ -913,23 +959,25 @@ class MedsStamp:
             delta_stamp_array.append(delta_stamp)
             
 
-   
         psf_kd, _  = bfd.multiImage(psf_array, (0,0), delta_stamp_array, wcs_array_corrected, 
                      pixel_noiselist = noise_array, bandlist = band_array,
                      pad_factor=FFT_pad_factor) 
             
-     
+
+            
         bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
         psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
+        psf_moment.recenter()
         Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
         self.psf_moments  = np.array([Mf,Mr,M1,M2])
         
 
-
         multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
+
         self.xyshift, error,msg = multi_moment.recenter()
         self.moments = multi_moment
-
+        
+ 
         
     def compute_moments_observed_psf(self, sigma = 3, FFT_pad_factor = 2., use_COADD_only = False, bands = ['g','r', 'i', 'z'], 
                                   bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False):
@@ -982,7 +1030,12 @@ class MedsStamp:
                     compute = compute & False
                     
                 if compute:
-                    images_array.append(self.imlist[index_band][exp] - self.model_rendered[index_band][exp])
+                    
+                    img = self.imlist[index_band][exp] - self.model_rendered[index_band][exp]
+                    #xy0 = self.wcslist[index_band][exp].xy0
+                    #smoothing = real_space_smoothing(xy0[0], xy0[1], img.shape[0], width=2)
+                    
+                    images_array.append(img) #*smoothing)
                     
                     noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
                     noise_array.append(noise_rms)
@@ -1002,6 +1055,7 @@ class MedsStamp:
                      pad_factor=FFT_pad_factor) 
             
             
+            
         bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
         psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
         psf_moment.recenter()
@@ -1010,6 +1064,8 @@ class MedsStamp:
 
         covm_even,covm_odd , covm_even_all , _ = psf_moment.get_covariance(returnbands=True)
         covgal = MomentCovariance(covm_even,covm_odd)
+        
+ 
                 
         self.psf_moments_observed_cov  = covgal.pack()
 
@@ -1057,7 +1113,7 @@ class MedsStamp:
 
         
         
-    def Load_MEDS(self, index, meds_array = [], mask_exposure = None):
+    def Load_MEDS(self, index, meds_array = [], mask_exposure = None, psf_array = None):
         '''
         Loads MEDS data into memory for a specific detection.
         It processes images, segmentation maps, weight maps, bitmasks, Jacobians, and PSFs for different exposures.
@@ -1109,15 +1165,19 @@ class MedsStamp:
             
             
 
-           
-            try:
-                self.psf = [m.get_cutout_list(index, type='psf') for m in meds_array]
-            except:
-                if self.verbose > 0:
-                    print ('No PSF extension in this file')
-        
+            if psf_array is not None:
+                # this is to speed up the deep fields
+                self.psf = [[ psf_array[i][m._cat['psf_start_row'][index, icut]:m._cat['psf_start_row'][index, icut]+25*25].reshape(25,25)  for icut in range(m['ncutout'][index]) ] for i,m in enumerate(meds_array)]
+               
+            else:
+                try:
+                    self.psf = [m.get_cutout_list(index, type='psf') for m in meds_array]
+                except:
+                    if self.verbose > 0:
+                        print ('No PSF extension in this file')
 
-        
+            #end = timeit.default_timer()
+      
 
         
         
@@ -1259,24 +1319,32 @@ class MedsStamp:
 
                 # Check various conditions to see if the exposure should be counted
 
-                # If mfrac_flag for this exposure is True, skip the exposure
+                # If mfrac_flag for this exposure is False, skip the exposure
                 if self.mfrac_flag[index_band][exp]:
                     pass
                 else:
                     compute = compute & False
 
-                # If explist_mask is not None and the mask for this exposure is True, skip it
+                # If explist_mask is not None and the mask for this exposure is False, skip it
                 if self.explist_mask is not None:
                     if self.explist_mask[index_band][exp - 1]:
                         pass
                     else:
                         compute = compute & False
 
-                # If flag_rendered_models for this exposure is True, skip the exposure
+                # If flag_rendered_models for this exposure is False, skip the exposure
                 if self.flag_rendered_models[index_band][exp]:
                     pass
                 else:
                     compute = compute & False
+                    
+                    
+                # If background_subtraction_OK_flag for this exposure is True, keep the exposure
+                if self.background_subtraction_OK_flag[index_band][exp]:
+                    pass
+                else:
+                    compute = compute & False
+                    
 
                 # If all conditions are met (compute is still True), count this as a good exposure
                 if compute:
@@ -1323,7 +1391,11 @@ class MedsStamp:
         bkg_tot = 0
         count = 0
         len_v = 0
+        
+        self.background_subtraction_OK_flag = [[True for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
+        
 
+        
         for b, band in enumerate(self.bands):
             if use_COADD_only:
                 start = 0
@@ -1358,11 +1430,14 @@ class MedsStamp:
                     v = (self.imlist[b][i])[np.where(maskarr==1)]
 
                 if len(v) > 50:
+                    self.background_subtraction_OK_flag[b][i] = True
                     correction = np.median(v)
                     self.imlist[b][i] -= correction
                     bkg_tot += correction
                     count += 1
                     len_v += len(v)
+                else:
+                    self.background_subtraction_OK_flag[b][i] = False
 
         if count == 0:
             self.bkg = bkg_tot
