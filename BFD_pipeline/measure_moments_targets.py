@@ -85,6 +85,14 @@ def run_chunk(chunk,config, tile, dictionary_runs):
         timers['count'] = 0.
 
         
+        objects_not_selected = dict()
+        objects_not_selected['high_mask_frac'] = 0
+        objects_not_selected['negative_flux'] = 0
+        objects_not_selected['model_not_rendered'] = 0
+        objects_not_selected['background_subtraction_failed'] = 0
+        objects_not_selected['moments_computation_failed'] = 0
+        
+        
         if config['debug_SN']:
             # Grid search with 0.1 resolution
             combinations = grid_search(0.1)
@@ -142,7 +150,7 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
                 if sum([band in bands_with_a_model for band in config['bands_meds_files']]) == len(config['bands_meds_files']):
 
-                    
+
                     # compute psf HSM moments  
                     Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].measure_psf_HSM_moments(config['bands_weights'],use_COADD_only = False)
                     t5 = timeit.default_timer()
@@ -177,7 +185,7 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                     if len(number_of_good_exposures_per_band[number_of_good_exposures_per_band>0.5]) == len(config['bands_meds_files']):
                
 
-                        
+
                         if config['debug']:
                             #if Collection_of_wide_field_galaxies.reserved_star_flag[meds_index]:
                                 for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].n_bands):
@@ -253,7 +261,7 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                 meb = meb_[:,0]
                                 
                                 # check on band fluxes:
-                                if np.sum(meb/np.sqrt( covm_even_all[0,0,:]) > -4.):
+                                if np.sum(meb/np.sqrt( covm_even_all[0,0,:]) > - 5.) == len(config['bands_meds_files']):
                                     
                                     # get new centers
                                     newcent=np.array([Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].image_ra, Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].image_dec])[:,0]+ Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].xyshift/3600.0
@@ -309,12 +317,29 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
                                  # clean MEDS_stamp   
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_rendered  
+                                del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_all_rendered
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments       
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments  
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments      
                         except:
-                            print ('FAILED moments computation index ', meds_index)
+                            print ('FAILED moments computation, meds index: ', meds_index)
                         
+             
+            
+            
+                        objects_not_selected['negative_flux'] = 0
+                        objects_not_selected['moments_computation_failed'] = 0   
+                    
+                    
+                    else:
+                        objects_not_selected['background_subtraction_failed'] += 1
+
+                else:
+                     objects_not_selected['model_not_rendered'] += 1  
+            else: 
+                objects_not_selected['high_mask_frac'] += 1
+
+        
             # clean MEDS_stamp   
             del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist
             del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].seglist
@@ -323,8 +348,11 @@ def run_chunk(chunk,config, tile, dictionary_runs):
             del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf      
    
             del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].DESDM_coadd_y           
-            del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].DESDM_coadd_x           
-
+            del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].DESDM_coadd_x   
+            try:
+                del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].maskarr_all  
+            except:
+                pass
             if meds_index%100 == 0:
                 gc.collect()
 
@@ -348,15 +376,16 @@ def run_chunk(chunk,config, tile, dictionary_runs):
         save_moments_targets(tab_targets,config['output_folder']+'/targets/targets_{0}_chunk_{1}.fits'.format(tile,chunk))
 
 
-    if config['debug_SN']:
-        np.save(config['output_folder']+'/targets/sn_array_for_debugging_{0}_chunk_{1}'.format(tile,chunk),sn_array)
+        if config['debug_SN']:
+            np.save(config['output_folder']+'/targets/sn_array_for_debugging_{0}_chunk_{1}'.format(tile,chunk),sn_array)
 
         
-    if config['debug']:
-        #image_storage['sn_array'] = sn_array
-        np.save(config['output_folder']+'/targets/images_for_debugging_{0}_chunk_{1}'.format(tile,chunk),image_storage)
+        if config['debug']:
+            #image_storage['sn_array'] = sn_array
+            np.save(config['output_folder']+'/targets/images_for_debugging_{0}_chunk_{1}'.format(tile,chunk),image_storage)
+            np.save(config['output_folder']+'/targets/tile_objects_failed_info_{0}_chunk_{1}'.format(tile,chunk),  objects_not_selected )
 
-            
+  
 
 def measure_moments_targets(**config,):
 

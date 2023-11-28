@@ -502,14 +502,15 @@ class CollectionOfImages:
         self.model_index = np.array(df2.join(df1).loc[self.coadd_IDs].index)
    
         # generate columns of matched positions for the epochs, which are in another table
-        # and have multiple entries
+        # and have multiple entries. This is because the best fitting PSF is different for each band. Note that
+        # the PSF estimated from the sof model is some sort of coadded PSF
         index_to_match = np.arange(len(galaxy_models_table.id_epoch_array))
         df1 = pd.DataFrame(data = {'pos': index_to_match} , index = galaxy_models_table.id_epoch_array)
         self.pos_epoch = (df2.join(df1))
 
 
                                   
-                                  
+        
         for MEDS_stamp, pos, model_index in zip(self.MEDS_stamps, self.pos, self.model_index):
             
             models_parameters = dict()
@@ -517,7 +518,7 @@ class CollectionOfImages:
             try:
                 pos_epoch = (np.array(self.pos_epoch.loc[ MEDS_stamp.coadd_ID[0]]).astype(np.int))[:,0]
             except:
-                pos_epoch = (np.array(self.pos_epoch.loc[ MEDS_stamp.coadd_ID[0]]).astype(np.int))[0]
+                pos_epoch = (np.array(self.pos_epoch.loc[ MEDS_stamp.coadd_ID[0]]).astype(np.int))[0]    
                 
             for band in MEDS_stamp.bands:
                 try:
@@ -595,8 +596,6 @@ class CollectionOfImages:
                             gmix_image = gmix_sky.convolve(psf_gmix)
 
 
-                            #v, u = jac(nbrxyref[1], nbrxyref[0])
-                            #gmix_image.set_cen(v, u)
                             image_self = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
 
                         else:
@@ -634,16 +633,27 @@ class CollectionOfImages:
                                                         dvdcol=wcs.jac[1,0])
 
                                 pars_ = self.MEDS_stamps[MEDS_index_j].model_parameters[band]['gal_pars']
-                                if pars_[-1] <0 :
-                                    pars_[-1] = 0.
-                                gmix_sky  = ngmix.gmix.GMixBDF(pars_)
+                                if pars_[-1] >0 :
+                                  
+                                    gmix_sky  = ngmix.gmix.GMixBDF(pars_)
+                                    #: sometimes the model fails using another psf than the one at the galaxy at the center of the stamp.
+                                    # if this happens, let's use its original psf. The difference is very small on the rendered model (<0.5%)
+                                    #
+                                    try:
+                                        gmix_image = gmix_sky.convolve(psf_gmix)
+                                        image = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
+                                        
+                                    except:
 
-                                gmix_image = gmix_sky.convolve(psf_gmix)
-                                image = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
+                                        psf_gmix = ngmix.gmix.GMix(pars=self.MEDS_stamps[MEDS_index_j].model_parameters[band]['psf_pars'])
+                                        gmix_image = gmix_sky.convolve(psf_gmix)
+                                        image = det*gmix_image.make_image((size_image, size_image), jacobian=jac)    
 
-                                rendered_image+=image
+
+                                    rendered_image+=image
+                                    
                                 flag_rendered_models_band_i = flag_rendered_models_band_i & True
-                                
+
                                 end = timeit.default_timer()
 
                             except:
@@ -1395,8 +1405,10 @@ class MedsStamp:
         self.background_subtraction_OK_flag = [[True for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
         
 
-        
+        maskarr_all = []
+
         for b, band in enumerate(self.bands):
+            maskarr_band = []
             if use_COADD_only:
                 start = 0
                 end = 1
@@ -1409,7 +1421,9 @@ class MedsStamp:
 
             
                 try:
-                    mask_cond = (self.masklist[b][i] == 0 ) & (self.model_all_rendered[b][i]<0.01*self.noise_rms[b][i])
+                    # this condition is driven by the fact the background is ~0.25.
+                    mask_cond = (self.masklist[b][i] == 0 ) & (self.model_all_rendered[b][i]<0.03)
+                    #*self.noise_rms[b][i])
                 except:
                
                     mask_cond = ( self.masklist[b][i] == 0 )
@@ -1423,6 +1437,7 @@ class MedsStamp:
                 uu = 6
                 maskarr[uu:-uu, uu:-uu] = 0
 
+                maskarr_band.append(maskarr)
                 try:
                     v = (self.imlist[b][i]-self.model_all_rendered[b][i])[np.where(maskarr==1)]
                 except:
@@ -1438,7 +1453,9 @@ class MedsStamp:
                     len_v += len(v)
                 else:
                     self.background_subtraction_OK_flag[b][i] = False
-
+                    
+                    
+            maskarr_all.append(maskarr_band)
         if count == 0:
             self.bkg = bkg_tot
             self.pixel_used_bkg = 1e10
@@ -1446,7 +1463,7 @@ class MedsStamp:
             self.bkg = bkg_tot / count
             self.pixel_used_bkg = len_v / count            
             
-            
+        self.maskarr_all = maskarr_all
             
             
     def zero_padd_psf(self):
