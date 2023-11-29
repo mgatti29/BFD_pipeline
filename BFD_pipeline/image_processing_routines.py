@@ -15,6 +15,15 @@ import os
 import timeit
 
 
+import re
+def get_ccdnum(path):
+    strt = re.search('_c', path).start()
+    return path[strt + 2 : strt + 2 + 2]
+
+def get_expnum(path):
+    strt = re.search('D00', path).start()
+    return path[strt + 3 : strt + 3 + 6]
+
 
 def grid_search(resolution):
         # Generate all possible combinations of r, i, z with the given resolution
@@ -206,8 +215,8 @@ def check_on_exposures(meds_array, exposure_list,bands):
         # For the first band, extract the exposure numbers from the image paths.
         # The exposure number is assumed to be at the start of the file name,
         # following a specific pattern ('red/D00'). This number is converted to an integer.
-        exposures_MEDS[index_band] = np.unique(np.array([np.int((image_path).split('_')[0].strip('red/D00')) for image_path in images_path[index_band]]))
-
+        exposures_MEDS[index_band] = np.unique(np.array([np.int(get_expnum(image_path)) for image_path in images_path[index_band]]))
+        
     mask_exposure = dict()
     for index_band,band in enumerate(bands):
         # Determine which exposures in the current band are bad by matching them
@@ -852,7 +861,8 @@ class MedsStamp:
 
         
     def compute_moments(self, sigma = 3, FFT_pad_factor = 2., use_COADD_only = False, bands = ['g','r', 'i', 'z'], 
-                                  bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False, add_noise_PSF_model = False):
+                                  bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False, 
+                        add_noise_PSF_model = False, compute_shotnoise_fluxes = False):
         '''
         Computes moments by combining exposures and bands.
         - sigma, FFT_pad_factor: Parameters for the BFD filter.
@@ -957,26 +967,56 @@ class MedsStamp:
                 else:
                     bad_exposures +=1
               
-
-        #self.good_exposures = good_exposures      
-        #self.bad_exposures = bad_exposures  
         
-        # compute image moments ----
+        # compute image  moments ------------------------------------------------
         kds, psf_shifts = bfd.multiImage(images_array, (0,0), psf_array, wcs_array, 
                              pixel_noiselist = noise_array, bandlist = band_array,
                              pad_factor=FFT_pad_factor, psf_recenter_sigma = 2.)
         
+        bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
+        multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
+        self.xyshift, error,msg = multi_moment.recenter()
+        self.moments = multi_moment
         
-        # Compute PSF moments, for diagnosticss
-             
+        # compute shot noise contributions ------------------------------------
+        if compute_shotnoise_fluxes:
+            cov = []
+            for rel in range(100):
+                new_images_array = []
+                for i in range(len(images_array)):
+                    img_ = copy.deepcopy(images_array[i])
+                    s0 = img_.shape[0]
+                    random_noise = np.random.normal(size = (s0,s0))
+                    mask = img_/noise_array[i]-1>4.
+                    img_[mask] += random_noise[mask]*np.sqrt(img_[mask])
+                    new_images_array.append(img_)
+
+
+                kds, psf_shifts = bfd.multiImage(new_images_array, (0,0), psf_array, wcs_array, 
+                             pixel_noiselist = noise_array, bandlist = band_array,
+                             pad_factor=FFT_pad_factor, psf_recenter_sigma = 2.)
+        
+
+                bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
+                multi_moments_shotnoise = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
+                multi_moments_shotnoise.recenter()
+                
+                mom, meb = multi_moments_shotnoise.get_moment(0.,0.,returnbands=True)
+                meb_ = np.array([m_.even for m_ in meb])
+                meb = meb_[:,0]
+                cov.append(meb)
+            cov = np.cov(np.array(cov).T)
+            self.flux_moments_shotnoise_covariance = cov
+
+        
+        
+        # compute PSF  moments ------------------------------------------------
         wcs_array_corrected = []
         delta_stamp_array = []
         psf_array_2 = []
         for i in range(len(kds)):
             nominal = np.array(psf_array[i].shape) // 2
             origin = (0.,0.)
-
-                        
 
             wcs_psf = wcs_array[i]
             wcs_psf.xy0 = (nominal+[psf_shifts[i][1],psf_shifts[i][0]])
@@ -986,18 +1026,15 @@ class MedsStamp:
             delta_stamp[nominal[0],nominal[1]] = 1.
             delta_stamp_array.append(delta_stamp)
             
-
         psf_kd, _  = bfd.multiImage(psf_array, (0,0), delta_stamp_array, wcs_array_corrected, 
                      pixel_noiselist = noise_array_psf, bandlist = band_array,
                      pad_factor=FFT_pad_factor) 
             
-
-            
-        bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
         psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
         psf_moment.recenter()
         Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
         self.psf_moments  = np.array([Mf,Mr,M1,M2])
+        
         
         if add_noise_PSF_model:
             covm_even,covm_odd , covm_even_all , _ = psf_moment.get_covariance(returnbands=True)
@@ -1005,10 +1042,7 @@ class MedsStamp:
             self.psf_moments_model_cov  = covgal.pack()
         
 
-        multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
 
-        self.xyshift, error,msg = multi_moment.recenter()
-        self.moments = multi_moment
         
  
         
@@ -1215,8 +1249,8 @@ class MedsStamp:
             
 
             #get ccd numbers ----
-            self.ccd_name =  [[ 1000*b+np.int((meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]]).split('_')[2].strip('c')) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]  
-            self.expnum =  [[ np.int((meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]]).split('_')[0].strip('red/D00')) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
+            self.ccd_name =  [[ 1000*b+np.int(get_ccdnum(meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]])) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]  
+            self.expnum =  [[ np.int(get_expnum(meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]])) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]
           
 
             # Make a mask in case any of the exposures are in the bad exposures list
