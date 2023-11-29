@@ -279,15 +279,21 @@ def save_moments_targets(self,fitsname):
         col.append(fits.Column(name="moments",format="5E",array=np.array(self.moment)))  
         col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
         col.append(fits.Column(name="covariance_psf_obs",format="15E",array=np.array(self.cov_psf_obs).astype(np.float32)))
-        
+        col.append(fits.Column(name="covariance_psf_model",format="15E",array=np.array(self.cov_psf_model).astype(np.float32)))
+        try:
+            col.append(fits.Column(name="covariance_psf_shotnoise",format="10E",array=np.array(self.cov_psf_shotnoise).astype(np.float32)))
+        except:
+            pass
+            
+            
             
         
         
         col.append(fits.Column(name="psf_moments",format="4E",array=self.psf_moment))
         col.append(fits.Column(name="psf_moment_obs",format="4E",array=self.psf_moment_obs))
         col.append(fits.Column(name="psf_hsm_moments",format="3E",array=self.psf_hsm_moment))
-        col.append(fits.Column(name="psf_hsm_moments_obs",format="3E",array=self.psf_hsm_moments_obs))
 
+        
         
 
 
@@ -846,7 +852,7 @@ class MedsStamp:
 
         
     def compute_moments(self, sigma = 3, FFT_pad_factor = 2., use_COADD_only = False, bands = ['g','r', 'i', 'z'], 
-                                  bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False):
+                                  bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False, add_noise_PSF_model = False):
         '''
         Computes moments by combining exposures and bands.
         - sigma, FFT_pad_factor: Parameters for the BFD filter.
@@ -863,6 +869,7 @@ class MedsStamp:
         psf_array = []
         wcs_array = []
         noise_array = []
+        noise_array_psf = []
         band_array = []
         
         psf_moments = np.zeros(4)
@@ -903,9 +910,20 @@ class MedsStamp:
 
                     images_array.append(img)
                     
-                    psf_array.append( self.psf[index_band][exp])
-                    
                     noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
+                    
+                    if add_noise_PSF_model:
+                        random_noise_amplitude = max(self.psf[index_band][exp].flatten())*0.01
+                        s0 = self.psf[index_band][exp].shape[0]
+                        random_noise = np.random.normal(size = (s0,s0))*random_noise_amplitude
+                        noise_array_psf.append(random_noise_amplitude)
+                        psf_array.append( self.psf[index_band][exp]+random_noise)
+                    else:
+                        noise_array_psf.append(noise_rms)
+                        psf_array.append( self.psf[index_band][exp])
+                    
+                    
+                    
                     noise_array.append(noise_rms)
                     
                     band_array.append(self.bands[index_band])
@@ -970,7 +988,7 @@ class MedsStamp:
             
 
         psf_kd, _  = bfd.multiImage(psf_array, (0,0), delta_stamp_array, wcs_array_corrected, 
-                     pixel_noiselist = noise_array, bandlist = band_array,
+                     pixel_noiselist = noise_array_psf, bandlist = band_array,
                      pad_factor=FFT_pad_factor) 
             
 
@@ -981,6 +999,11 @@ class MedsStamp:
         Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
         self.psf_moments  = np.array([Mf,Mr,M1,M2])
         
+        if add_noise_PSF_model:
+            covm_even,covm_odd , covm_even_all , _ = psf_moment.get_covariance(returnbands=True)
+            covgal = MomentCovariance(covm_even,covm_odd) 
+            self.psf_moments_model_cov  = covgal.pack()
+        
 
         multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
 
@@ -990,7 +1013,7 @@ class MedsStamp:
  
         
     def compute_moments_observed_psf(self, sigma = 3, FFT_pad_factor = 2., use_COADD_only = False, bands = ['g','r', 'i', 'z'], 
-                                  bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False):
+                                  bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False, compute_shotnoise = False):
         '''
         Computes moments by combining exposures and bands. Special case where we observed a star.
         - sigma, FFT_pad_factor: Parameters for the BFD filter.
@@ -1059,25 +1082,65 @@ class MedsStamp:
                     delta_stamp[nominal[0],nominal[1]] = 1.
                     delta_stamp_array.append(delta_stamp)
 
+                    
+                    
+                    
 
         psf_kd, _  = bfd.multiImage(images_array, (0,0), delta_stamp_array, wcs_array, 
                      pixel_noiselist = noise_array, bandlist = band_array,
                      pad_factor=FFT_pad_factor) 
-            
-            
-            
+        
         bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
         psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
         psf_moment.recenter()
         Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
         self.psf_moments_observed  = np.array([Mf,Mr,M1,M2])
-
+        
         covm_even,covm_odd , covm_even_all , _ = psf_moment.get_covariance(returnbands=True)
         covgal = MomentCovariance(covm_even,covm_odd)
-        
- 
-                
+     
         self.psf_moments_observed_cov  = covgal.pack()
+        
+        
+        # bootstrap shot noise errors
+
+        #info = dict()
+        #info['images_array'] = copy.deepcopy(images_array)
+        #info['noise_array'] = noise_array
+        if compute_shotnoise:
+            cov = []
+            for rel in range(100):
+                new_images_array = []
+                for i in range(len(images_array)):
+                    img_ = copy.deepcopy(images_array[i])
+                    s0 = img_.shape[0]
+                    random_noise = np.random.normal(size = (s0,s0))
+                    mask = img_/noise_array[i]-1>4.
+                    img_[mask] += random_noise[mask]*np.sqrt(img_[mask])
+                    new_images_array.append(img_)
+
+
+                psf_kd, _  = bfd.multiImage(new_images_array, (0,0), delta_stamp_array, wcs_array, 
+                         pixel_noiselist = noise_array, bandlist = band_array,
+                         pad_factor=FFT_pad_factor) 
+
+                bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
+                psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
+                psf_moment.recenter()
+                Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
+                cov.append([Mf,Mr,M1,M2])
+            cov = np.cov(np.array(cov).T)
+            #info['new_images_array'] = copy.deepcopy(new_images_array)
+            #info['moments'] = np.array([Mf,Mr,M1,M2])
+            #info['cov_shotnoise'] = cov
+            #info['cov'] = covgal.pack()
+
+            self.psf_moments_shotnoise_cov  = [cov[0,0],cov[0,1],cov[0,2],cov[0,3],cov[1,1],cov[1,2],cov[1,3],cov[2,2],cov[2,3],cov[3,3]]
+
+#        np.save('/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp_0.65_fiducial_psf_noise/info_{0}'.format(self.MEDS_index),info)
+
+            
+        
 
         
     def compute_noise(self):

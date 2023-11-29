@@ -292,8 +292,6 @@ def measure_moments_per_tile(config, dictionary_runs, tile) :
 
                             if len(number_of_good_exposures_per_band[number_of_good_exposures_per_band>0.5]) == len(config['bands_meds_files']):
 
-
-
                                 if config['debug']:
 
                                     for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].n_bands):

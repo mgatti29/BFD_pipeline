@@ -211,7 +211,7 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                                            use_COADD_only =False, 
                                                            bands = config['bands_meds_files'],
                                                            bands_weights = config['bands_weights'], 
-                                                           FFT_pad_factor=config['FFT_pad_factor'])
+                                                           FFT_pad_factor=config['FFT_pad_factor'], add_noise_PSF_model = config['add_noise_PSF_model'])
 
 
 
@@ -221,7 +221,7 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                                            use_COADD_only =False, 
                                                            bands = config['bands_meds_files'],
                                                            bands_weights = config['bands_weights'], 
-                                                           FFT_pad_factor=config['FFT_pad_factor'])
+                                                           FFT_pad_factor=config['FFT_pad_factor'], compute_shotnoise = config['add_noise_PSF_model'])
                                 Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].measure_psf_HSM_moments(config['bands_weights'],use_COADD_only = False,do_it_for_the_image = True)
 
 
@@ -257,6 +257,7 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                 covm_even,covm_odd , covm_even_all , _ = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments.get_covariance(returnbands=True)
                                 
                                 
+          
                                 meb_ = np.array([m_.even for m_ in meb])
                                 meb = meb_[:,0]
                                 
@@ -297,14 +298,30 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
                                     try:
                                         tab_targets.psf_moment_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed)
-                                        # add also covariance of these guys
                                         tab_targets.cov_psf_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed_cov)
-                                        #
+                                        tab_targets.cov_psf_model.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_model_cov)
+                                        if config['add_noise_PSF_model']:
+                                            tab_targets.cov_psf_shotnoise.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_shotnoise_cov)
+                                                                              
+
+                                        
+                                        del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed
+                                        del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed_cov
+                                        del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_model_cov
+                                        if config['add_noise_PSF_model']:
+                                            del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_shotnoise_cov
+                                        
+                                        
+                                                                                #
                                     except:
                                         tab_targets.psf_moment_obs.append(np.zeros(4))
                                         tab_targets.cov_psf_obs.append(np.zeros(15))
+                                        tab_targets.cov_psf_model.append(np.zeros(15))
+                                        if config['add_noise_PSF_model']:
+                                            tab_targets.cov_psf_shotnoise.append(np.zeros(10))
+                                             
 
-
+            
                                     try:
                                         tab_targets.psf_hsm_moments_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments_obs)
                                     except:
@@ -375,6 +392,8 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
         save_moments_targets(tab_targets,config['output_folder']+'/targets/targets_{0}_chunk_{1}.fits'.format(tile,chunk))
 
+        del tab_targets
+        gc.collect()
 
         if config['debug_SN']:
             np.save(config['output_folder']+'/targets/sn_array_for_debugging_{0}_chunk_{1}'.format(tile,chunk),sn_array)
@@ -400,7 +419,11 @@ def measure_moments_targets(**config,):
     if 'reserved_stars_list' not in config.keys():
         config['reserved_stars_list'] = False
         print ('You did not provide any list of reserved stars; I will set the variable reserved_stars_list to False')
-        
+    
+    if 'add_noise_PSF_model' not in config.keys():
+        config['add_noise_PSF_model'] = False
+
+
         
     # makes a dictionary of the tiles that need to be run
     dictionary_runs = dict()
