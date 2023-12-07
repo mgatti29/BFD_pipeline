@@ -3,6 +3,8 @@ from yaml import Loader
 import os
 from .measure_moments_targets import measure_moments_targets
 from .measure_moments_templates import measure_moments_templates
+from .target_noise_tiers import target_noise_tiers
+from .make_templates import make_templates
 
 def BFD_pipeline(config):
     """
@@ -60,8 +62,7 @@ def BFD_pipeline(config):
             pass 
                          
     #Add the general keys to all the other submodules
-    for key1 in ['measure_moments_templates','measure_moments_targets',]:
-        if key1 != 'general':
+    for key1 in ['measure_moments_templates','measure_moments_targets','target_noise_tiers','make_templates']:
             for key2 in config['general'].keys():
                 try:
                     config[key1][key2] = config['general'][key2]
@@ -75,13 +76,23 @@ def BFD_pipeline(config):
             if entry == 'measure_moments_targets':  
                 measure_moments_targets(**config['measure_moments_targets'])
             
-
     if config['run']!= None:
         for entry in config['run']:
             if entry == 'measure_moments_templates':  
                 measure_moments_templates(**config['measure_moments_templates'])
             
- 
+    if config['run']!= None:
+        for entry in config['run']:
+            if entry == 'target_noise_tiers':  
+                target_noise_tiers(**config['target_noise_tiers'])
+            
+    if config['run']!= None:
+        for entry in config['run']:
+            if entry == 'make_templates':  
+                make_templates(**config['make_templates'])
+            
+
+
             
             
 def read_config(file_name):

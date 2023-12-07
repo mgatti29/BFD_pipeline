@@ -58,6 +58,8 @@ def measure_moments_templates(**config):
     tiles = list(dictionary_runs.keys())
     print ('TILES TO RUN: ',len(tiles))
 
+    
+
     run_count = 0
     if not config['MPI']:
         while run_count<len(tiles):
@@ -102,6 +104,7 @@ def measure_moments_templates(**config):
         Mf_band = []
         cov_Mf_band = []
         tile = []
+        flux_moments_shotnoise_covariance = []
 
         for file in files:
             tile_ = file.split('info_')[-1].split('_r')[0]
@@ -117,7 +120,10 @@ def measure_moments_templates(**config):
                 Mf_band.append(template_info[k]['Mf_band'])
                 cov_Mf_band.append(template_info[k]['cov_Mf_band'])
                 tile.append(tile_)
-
+                if config['compute_shotnoise_fluxes']:
+                    cov_shotnoise = template_moments_info[coadd_id]['flux_moments_shotnoise_covariance']
+                    flattened_covariance = [cov_shotnoise[i][j] for i in range(cov_shotnoise.shape[0]) for j in range(i,cov_shotnoise.shape[0])]
+                    flux_moments_shotnoise_covariance.append(flattened_covariance)
 
         output = Table()
         output['moments'] = np.array(moments)
@@ -128,23 +134,20 @@ def measure_moments_templates(**config):
         output['cov_Mf_band'] = np.array(cov_Mf_band)
         output['tile'] = np.array(tile)
         output['coadd_ID'] = np.array(coadd_ID)
-
+        if config['compute_shotnoise_fluxes']:
+             output['flux_moments_shotnoise_covariance'] = np.array(flux_moments_shotnoise_covariance)
         try:
             output.write(config['output_folder']+'/templates/'+'summary_templates.fits' ,overwrite=True)
         except:
             pass
 
 def measure_moments_per_tile(config, dictionary_runs, tile) : 
-# Initialise where we're going to store all the images loaded from the MEDS files
 
-        print (config['output_folder'])
         Collection_of_wide_field_galaxies = CollectionOfImages()
 
         print ('Initialising MEDS stamps')
         meds_array = [meds.MEDS(dictionary_runs[tile][band]['meds'][0]) for band in config['bands_meds_files']]
         psf_array = [ fits.open(dictionary_runs[tile][band]['meds'][0])['psf'].data for band in config['bands_meds_files']]
-
-        print([(dictionary_runs[tile][band]['meds'][0]) for band in config['bands_meds_files']])
 
         for meds_index in frogress.bar(range(meds_array[0].size)):
             Collection_of_wide_field_galaxies.add_MEDS_stamp(MedsStamp(meds_index, meds_array = meds_array, bands = config['bands_meds_files']))
@@ -310,13 +313,15 @@ def measure_moments_per_tile(config, dictionary_runs, tile) :
 
                                 # Compute moments
                                 try:
+                                #if 1==1:
                                     t9 = timeit.default_timer()
 
                                     Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].compute_moments(config['filter_sigma'], 
                                                                    use_COADD_only =True, 
                                                                    bands = config['bands_meds_files'],
                                                                    bands_weights = config['bands_weights'], 
-                                                                   FFT_pad_factor=config['FFT_pad_factor'])
+                                                                   FFT_pad_factor=config['FFT_pad_factor'], compute_shotnoise_fluxes = config['compute_shotnoise_fluxes'])
+                                    
 
                                     t10 = timeit.default_timer()
                                     timers['compute_moments'].append(t10-t9)
@@ -348,7 +353,11 @@ def measure_moments_per_tile(config, dictionary_runs, tile) :
                                         template_moments_info[coadd_id]['cov_Mf_band'] = covm_even_all[0,0,:]
                                         template_moments_info[coadd_id]['Mf_band'] = meb
                                         template_moments_info[coadd_id]['mfrac_band'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].mfrac_per_band
+                                        if config['compute_shotnoise_fluxes']:
+                                            template_moments_info[coadd_id]['flux_moments_shotnoise_covariance'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].flux_moments_shotnoise_covariance
+                                            del  Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].flux_moments_shotnoise_covariance
 
+                       
                                     else:
                                         objects_not_selected['negative_flux']   += 1  
 

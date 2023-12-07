@@ -435,11 +435,18 @@ def measure_moments_targets(**config,):
             dictionary_runs[tile][band]['meds'] = np.array(f_)[np.array([((band+'_meds') in ff) for ff in f_])][0]
 
    
-    tiles = list(dictionary_runs.keys())
+    tiles_ = list(dictionary_runs.keys())
+    tiles = []
+    for tile in tiles_:
+        path = config['output_folder']+'/targets/targets_'+tile
+        if not os.path.exists(path+config['output_label']+'.fits'):
+       
+            tiles.append(tile)
+    tiles = np.array(tiles)
+
     print ('TILES TO RUN: ',len(tiles))
     # Runs the main pipeline **********************************************************
     # We are parallelising with MPI; each process gets a full tile.
-    
     
     
     run_count = 0
@@ -488,8 +495,6 @@ def measure_moments_per_tile(config,dictionary_runs,tile):
             for chunk in xlist:
                 run_chunk(chunk, config, tile, dictionary_runs)
         else:
-            
-            
             pool = multiprocessing.Pool(processes=config['agents'])
             _ = pool.map(partial(run_chunk_single_threaded, config = config, tile = tile, dictionary_runs = dictionary_runs), xlist)
 
