@@ -232,6 +232,36 @@ def check_on_exposures(meds_array, exposure_list,bands):
     return mask_exposure
 
 
+
+
+
+def assign_efficiency(meds_array, efficiency_list,bands):
+    # Extract image paths from the meds_array, which is assumed to contain
+    # metadata about the images. The '_image_info' dictionary key is used
+    # to access the paths, and the leading character of each path is removed.
+    
+    images_path = [m._image_info['image_path'][1:] for m in meds_array]
+    exposures_MEDS = dict()
+    # Loop through each band (spectral range) to process the exposures.
+    for index_band,band in enumerate(bands):
+        # For the first band, extract the exposure numbers from the image paths.
+        # The exposure number is assumed to be at the start of the file name,
+        # following a specific pattern ('red/D00'). This number is converted to an integer.
+        exposures_MEDS[band] = np.unique(np.array([np.int(get_expnum(image_path)) for image_path in images_path[index_band]]))
+
+        efficiency_list_output = dict()
+    for index_band,band in enumerate(bands):
+        efficiency_list_output[index_band] = dict()
+        match_exposures = np.array(np.in1d(efficiency_list[band]['EXPNUM'], exposures_MEDS[band]))
+        entries = 100*efficiency_list[band]['EXPNUM'][match_exposures] + efficiency_list[band]['CCDNUM'][match_exposures]
+        efficiencies = efficiency_list[band]['eta'][match_exposures]
+        for e, entry in enumerate(entries):
+            efficiency_list_output[index_band][entry] = efficiencies[e]
+    return efficiency_list_output
+
+
+
+
 def real_space_smoothing(x0, y0, shape, width=1.):
     """
     Create a real space smoothing kernel.
@@ -331,6 +361,8 @@ def save_moments_targets(self,fitsname):
 
         col.append(fits.Column(name="bkg",format="D",array=self.bkg))
         col.append(fits.Column(name="pixels_used_for_bkg",format="K",array=self.pixel_used_bkg))
+        col.append(fits.Column(name="weighted_efficiency",format="D",array=self.weighted_efficiency))
+        
         #'''
         # let's add, maybe, some average masked fraction
 
@@ -583,9 +615,12 @@ class CollectionOfImages:
 
             flag_rendered_models_band = []
             
+  
+            
             # sometimes the model doesn't exist. in this case, let's flag the exposure 
             for i in range( end): 
                 if i >= start:
+                    #if 1 ==1 :
                     try:
                         size_image = self.MEDS_stamps[MEDS_index].imlist[b][i].shape[0]    
 
@@ -858,11 +893,14 @@ class MedsStamp:
         return bands_not_masked_list
 
 
-
+    def compute_efficiencty(self):
+        pass
+        
+        
         
     def compute_moments(self, sigma = 3, FFT_pad_factor = 2., use_COADD_only = False, bands = ['g','r', 'i', 'z'], 
                                   bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False, 
-                        add_noise_PSF_model = False, compute_shotnoise_fluxes = False):
+                        add_noise_PSF_model = False, compute_shotnoise_fluxes = False,force_compute = False):
         '''
         Computes moments by combining exposures and bands.
         - sigma, FFT_pad_factor: Parameters for the BFD filter.
@@ -887,7 +925,16 @@ class MedsStamp:
         
         good_exposures = 0
         bad_exposures = 0
+        
+        
+        
+        weighted_efficiency = 0
+        
         for  index_band,band in enumerate(bands):
+            
+            weights_exposure = 0
+            weighted_efficiency_band = 0
+            
             if use_COADD_only:
                 start = 0
                 end = 1
@@ -913,7 +960,7 @@ class MedsStamp:
                 else:
                     compute = compute & False
                     
-                if compute:
+                if compute or force_compute:
                     good_exposures += 1
                     img = self.imlist[index_band][exp] - self.model_rendered[index_band][exp]
                     
@@ -922,6 +969,14 @@ class MedsStamp:
                     
                     noise_rms = (1./np.sqrt(np.median(self.wtlist[index_band][exp][self.masklist[index_band][exp] == 0])))
                     
+                    
+                                
+                    weights_exposure += 1/noise_rms**2
+                    if self.efficiency_exp is not None:
+                        weighted_efficiency_band += self.efficiency_exp[index_band][exp-1]/noise_rms**2
+                   
+
+            
                     if add_noise_PSF_model:
                         random_noise_amplitude = max(self.psf[index_band][exp].flatten())*0.01
                         s0 = self.psf[index_band][exp].shape[0]
@@ -967,7 +1022,11 @@ class MedsStamp:
                 else:
                     bad_exposures +=1
               
-        
+            
+            weighted_efficiency_band /= weights_exposure
+            weighted_efficiency += bands_weights[index_band]*weighted_efficiency_band
+        self.weighted_efficiency = weighted_efficiency
+            
         # compute image  moments ------------------------------------------------
         kds, psf_shifts = bfd.multiImage(images_array, (0,0), psf_array, wcs_array, 
                              pixel_noiselist = noise_array, bandlist = band_array,
@@ -975,7 +1034,7 @@ class MedsStamp:
         
         bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
         multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
-        self.xyshift, error,msg = multi_moment.recenter()
+        self.xyshift, self.error_moments_recentering,msg = multi_moment.recenter()
         self.moments = multi_moment
         
         # compute shot noise contributions ------------------------------------
@@ -1233,7 +1292,8 @@ class MedsStamp:
 
         
         
-    def Load_MEDS(self, index, meds_array = [], mask_exposure = None, psf_array = None):
+    def Load_MEDS(self, index, meds_array = [], mask_exposure = None, efficiency_list = None, psf_array = None,
+                 img_array  = None ,mask_array = None,seg_array  = None , w_array = None):
         '''
         Loads MEDS data into memory for a specific detection.
         It processes images, segmentation maps, weight maps, bitmasks, Jacobians, and PSFs for different exposures.
@@ -1247,17 +1307,34 @@ class MedsStamp:
             self.image_ra = [m['ra'][index] for m in meds_array]
             self.image_dec = [m['dec'][index] for m in meds_array]
             #self.ncutout = [m['ncutout'][index] for m in meds_array]
-            self.imlist = [m.get_cutout_list(index) for m in meds_array]
+            if img_array is not None:
+                self.imlist = [[ img_array[i][m._cat['start_row'][index, icut]:m._cat['start_row'][index, icut]+m[index]['box_size']**2].reshape(m[index]['box_size'],m[index]['box_size'])  for icut in range(m['ncutout'][index]) ] for i,m in enumerate(meds_array)]
+            else:
+                self.imlist = [m.get_cutout_list(index) for m in meds_array]
    
-
+            if seg_array is not None:
+                self.seglist = [[ seg_array[i][m._cat['start_row'][index, icut]:m._cat['start_row'][index, icut]+m[index]['box_size']**2].reshape(m[index]['box_size'],m[index]['box_size'])  for icut in range(m['ncutout'][index]) ] for i,m in enumerate(meds_array)]
+            else:
+                self.seglist = [m.get_cutout_list(index, type='seg') for m in meds_array]
+            
+            if mask_array is not None:
+                self.masklist = [[ mask_array[i][m._cat['start_row'][index, icut]:m._cat['start_row'][index, icut]+m[index]['box_size']**2].reshape(m[index]['box_size'],m[index]['box_size'])  for icut in range(m['ncutout'][index]) ] for i,m in enumerate(meds_array)]
+            else:
+                self.masklist = [m.get_cutout_list(index, type='bmask') for m in meds_array]
+            
+            if w_array is not None:
+                self.wtlist = [[ w_array[i][m._cat['start_row'][index, icut]:m._cat['start_row'][index, icut]+m[index]['box_size']**2].reshape(m[index]['box_size'],m[index]['box_size'])  for icut in range(m['ncutout'][index]) ] for i,m in enumerate(meds_array)]
+            else:
+                self.wtlist = [m.get_cutout_list(index, type='weight') for m in meds_array]
+            
+                
+            
+            
             #self.orig_rowcol = [[ (meds_array[b]['orig_row'][index][i],meds_array[b]['orig_col'][index][i]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))] 
             self.orig_start_rowcol = [[ (meds_array[b]['orig_start_row'][index][i],meds_array[b]['orig_start_col'][index][i]) for i in range((self.ncutout[b]))] for b in range(len(self.bands))] 
      
             # row,col in the cutouts. Is generally close to center of the tile.
             self.rowcol = [[meds_array[b].get_cutout_rowcol(index,i) for i in range((self.ncutout[b]))] for b in range(len(self.bands))]
-            self.seglist = [m.get_cutout_list(index, type='seg') for m in meds_array]
-            self.wtlist = [m.get_cutout_list(index, type='weight') for m in meds_array]
-            self.masklist = [m.get_cutout_list(index, type='bmask') for m in meds_array]
             self.jaclist = [m.get_jacobian_list(index) for m in meds_array]
             
 
@@ -1266,10 +1343,21 @@ class MedsStamp:
             self.expnum =  [[ np.int(get_expnum(meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]])) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]
           
 
+        
+            if efficiency_list is not None:
+                self.expnum_ccd =  [[ (self.ccd_name[b][i-1]-1000*b)+100*self.expnum[b][i-1]  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
+                self.efficiency_exp =  [[ efficiency_list[b][self.expnum_ccd[b][i-1]]  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]
+            else:
+                self.efficiency_exp = None
+                
+                
             # Make a mask in case any of the exposures are in the bad exposures list
            # '''
-            if mask_exposure is not None:        
-                self.expnum_ccd =  [[ (self.ccd_name[b][i-1]-1000*b)+100*self.expnum[b][i-1]  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
+            if mask_exposure is not None:  
+                try:
+                    self.expnum_ccd
+                except:
+                    self.expnum_ccd =  [[ (self.ccd_name[b][i-1]-1000*b)+100*self.expnum[b][i-1]  for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))] 
 
                 
                 # the first entry is a check on good exposures, the second on bad exposures.
@@ -1284,7 +1372,7 @@ class MedsStamp:
             self.DESDM_coadd_y = [m['input_col'][index] for m in meds_array]
             
             
-
+            
             if psf_array is not None:
                 # this is to speed up the deep fields
                 self.psf = [[ psf_array[i][m._cat['psf_start_row'][index, icut]:m._cat['psf_start_row'][index, icut]+25*25].reshape(25,25)  for icut in range(m['ncutout'][index]) ] for i,m in enumerate(meds_array)]
@@ -1593,6 +1681,7 @@ class MedsStamp:
                     if size_psf_x>size_x:
                         dx = -np.int((size_x-size_psf_x)/2)
                         self.psf[index_band][exp] = self.psf[index_band][exp][dx:dx+size_x,:][:,dx:dx+size_x]
+                        
                     # if the PiFF stamp is smaller than the image
                     elif size_psf_x<size_x:
                         dx = np.int((size_x-size_psf_x)//2)+1

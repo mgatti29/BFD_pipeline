@@ -32,6 +32,10 @@ def measure_moments_templates(**config):
     It computes the moments from des y6 deef fields tiles.
     '''
 
+    if 'slow_meds' not in config.keys():
+        config['slow_meds'] = False
+
+        
     dictionary_runs = dict()
     for field in config['fields']:
         folders = glob.glob(config['path_MEDS']+field+'/*/')
@@ -104,6 +108,7 @@ def measure_moments_templates(**config):
         Mf_band = []
         cov_Mf_band = []
         tile = []
+        covariance = []
         flux_moments_shotnoise_covariance = []
 
         for file in files:
@@ -113,6 +118,7 @@ def measure_moments_templates(**config):
 
             for k in template_info.keys():
                 moments.append(template_info[k]['moments'])
+                covariance.append(template_info[k]['covariance'])
                 bkg.append(template_info[k]['bkg'])
                 meds_index.append(template_info[k]['meds_index'])
                 coadd_ID.append(k)
@@ -127,6 +133,7 @@ def measure_moments_templates(**config):
 
         output = Table()
         output['moments'] = np.array(moments)
+        output['covariance'] = np.array(covariance)
         output['bkg'] = np.array(bkg)
         output['meds_index'] = np.array(meds_index)
         output['mfrac_band'] = np.array(mfrac_band)
@@ -148,7 +155,15 @@ def measure_moments_per_tile(config, dictionary_runs, tile) :
         print ('Initialising MEDS stamps')
         meds_array = [meds.MEDS(dictionary_runs[tile][band]['meds'][0]) for band in config['bands_meds_files']]
         psf_array = [ fits.open(dictionary_runs[tile][band]['meds'][0])['psf'].data for band in config['bands_meds_files']]
-
+        
+        
+        if config['slow_meds']:
+            img_array = [ fits.open(dictionary_runs[tile][band]['meds'][0])['IMAGE_CUTOUTS'].data for band in config['bands_meds_files']]
+            mask_array = [ fits.open(dictionary_runs[tile][band]['meds'][0])['BMASK_CUTOUTS'].data for band in config['bands_meds_files']]
+            seg_array = [ fits.open(dictionary_runs[tile][band]['meds'][0])['SEG_CUTOUTS'].data for band in config['bands_meds_files']]
+            w_array = [ fits.open(dictionary_runs[tile][band]['meds'][0])['weight_cutouts'].data for band in config['bands_meds_files']]
+        
+            
         for meds_index in frogress.bar(range(meds_array[0].size)):
             Collection_of_wide_field_galaxies.add_MEDS_stamp(MedsStamp(meds_index, meds_array = meds_array, bands = config['bands_meds_files']))
 
@@ -220,14 +235,17 @@ def measure_moments_per_tile(config, dictionary_runs, tile) :
 
                     # Load images, psf, wcs, etc.
                     start = timeit.default_timer()
-                    Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].Load_MEDS(meds_index, meds_array = meds_array, mask_exposure = mask_exposure, psf_array = psf_array)
+                    if config['slow_meds']:
+                        Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].Load_MEDS(meds_index, meds_array = meds_array, mask_exposure = mask_exposure, psf_array = psf_array,img_array  = img_array ,mask_array = mask_array,seg_array  = seg_array, w_array = w_array )
+                    else:
+                        Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].Load_MEDS(meds_index, meds_array = meds_array, mask_exposure = mask_exposure, psf_array = psf_array)
+                        
                     t1 = timeit.default_timer()                
                     timers['load MEDS'].append (t1-start)
 
-
-
                     # check masked bands and only consider objects with N bands not masked
                     bands_not_masked = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].check_stamp_masked_frac(limit=config['max_frac_stamp_masked'],use_COADD_only=True)
+                   
                     t2 = timeit.default_timer()
                     timers['check_stamp_masked_frac'] .append (t2-t1)
 
@@ -300,7 +318,7 @@ def measure_moments_per_tile(config, dictionary_runs, tile) :
                                     for index_band in range(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].n_bands):
                                         exp = 0
 
-                                        image_storage[meds_index][index_band][exp]['image_after_processing'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp]
+                                        image_storage[meds_index][index_band][exp]['image_after_processing'] = copy.deepcopy(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].imlist[index_band][exp])
                                         image_storage[meds_index][index_band][exp]['model_rendered'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_rendered[index_band][exp]
                                         image_storage[meds_index][index_band][exp]['model_all_rendered'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].model_all_rendered[index_band][exp]
                                         image_storage[meds_index][index_band][exp]['mask'] =copy.deepcopy(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].masklist[index_band][exp])
@@ -322,49 +340,56 @@ def measure_moments_per_tile(config, dictionary_runs, tile) :
                                                                    bands_weights = config['bands_weights'], 
                                                                    FFT_pad_factor=config['FFT_pad_factor'], compute_shotnoise_fluxes = config['compute_shotnoise_fluxes'])
                                     
+                                    if  (not Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].error_moments_recentering):
+                                   # if 1==1:
+                                        
+                                        t10 = timeit.default_timer()
+                                        timers['compute_moments'].append(t10-t9)
 
-                                    t10 = timeit.default_timer()
-                                    timers['compute_moments'].append(t10-t9)
-
-                                    mom, meb = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments.get_moment(0.,0.,returnbands=True)
-                                    # get covariances, and get per band flux covariances,  
-                                    covm_even,covm_odd , covm_even_all , _ = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments.get_covariance(returnbands=True)
-                                    meb_ = np.array([m_.even for m_ in meb])
-                                    meb = meb_[:,0]
-
-
-
-                                     # check on band fluxes:
-                                    if np.sum(meb/np.sqrt( covm_even_all[0,0,:]) > -5.) == len(config['bands_meds_files']):
-
-                                        #print (mom.even)
-                                        coadd_id = Collection_of_wide_field_galaxies.coadd_IDs[meds_index]
-                                        template_moments_container[coadd_id] = dict()
-                                        template_moments_container[coadd_id]['moments'] = copy.deepcopy(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments)
+                                        mom, meb = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments.get_moment(0.,0.,returnbands=True)
+                                        # get covariances, and get per band flux covariances,  
+                                        covm_even,covm_odd , covm_even_all , _ = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments.get_covariance(returnbands=True)
+                                        meb_ = np.array([m_.even for m_ in meb])
+                                        meb = meb_[:,0]
+                             
 
 
-                                        # save properties of the templates -----
-                                        template_moments_info[coadd_id] = dict()
-                                        template_moments_info[coadd_id]['meds_index'] = meds_index
-                                        template_moments_info[coadd_id]['moments'] = mom.even
-                                        template_moments_info[coadd_id]['covariance'] =  MomentCovariance(covm_even,covm_odd).pack()
-                                        template_moments_info[coadd_id]['bkg'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].bkg
-                                        template_moments_info[coadd_id]['pixel_used_bkg'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].pixel_used_bkg
-                                        template_moments_info[coadd_id]['cov_Mf_band'] = covm_even_all[0,0,:]
-                                        template_moments_info[coadd_id]['Mf_band'] = meb
-                                        template_moments_info[coadd_id]['mfrac_band'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].mfrac_per_band
-                                        if config['compute_shotnoise_fluxes']:
-                                            template_moments_info[coadd_id]['flux_moments_shotnoise_covariance'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].flux_moments_shotnoise_covariance
-                                            del  Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].flux_moments_shotnoise_covariance
 
-                       
+                                         # check on band fluxes:
+                                        #print ('MEB ', meb)
+                                        if np.sum(meb/np.sqrt( covm_even_all[0,0,:]) > -5.) == len(config['bands_meds_files']):
+
+                                            #print (mom.even)
+                                            coadd_id = Collection_of_wide_field_galaxies.coadd_IDs[meds_index]
+                                            template_moments_container[coadd_id] = dict()
+                                            template_moments_container[coadd_id]['moments'] = copy.deepcopy(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments)
+
+                                            #print ('moments ', template_moments_container[coadd_id]['moments'])
+                                            # save properties of the templates -----
+                                            template_moments_info[coadd_id] = dict()
+                                            template_moments_info[coadd_id]['meds_index'] = meds_index
+                                            template_moments_info[coadd_id]['moments'] = mom.even
+                                            template_moments_info[coadd_id]['covariance'] =  MomentCovariance(covm_even,covm_odd).pack()
+                                            template_moments_info[coadd_id]['bkg'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].bkg
+                                            template_moments_info[coadd_id]['pixel_used_bkg'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].pixel_used_bkg
+                                            template_moments_info[coadd_id]['cov_Mf_band'] = covm_even_all[0,0,:]
+                                            template_moments_info[coadd_id]['Mf_band'] = meb
+                                            template_moments_info[coadd_id]['mfrac_band'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].mfrac_per_band
+                                            if config['compute_shotnoise_fluxes']:
+                                                template_moments_info[coadd_id]['flux_moments_shotnoise_covariance'] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].flux_moments_shotnoise_covariance
+                                                del  Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].flux_moments_shotnoise_covariance
+
+
+                                        else:
+                                            objects_not_selected['negative_flux']   += 1  
+
+                                        t11 = timeit.default_timer()
+                                        timers['extra_info'].append(t11-t10)             
+
                                     else:
-                                        objects_not_selected['negative_flux']   += 1  
-
-                                    t11 = timeit.default_timer()
-                                    timers['extra_info'].append(t11-t10)             
-
-
+                                        objects_not_selected['moments_computation_failed'] += 1
+                                        print ('FAILED moments recentering, meds index: ',meds_index)
+                        
 
                                 except:
                                     objects_not_selected['moments_computation_failed'] += 1

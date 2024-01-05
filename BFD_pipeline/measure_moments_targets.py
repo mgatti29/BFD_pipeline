@@ -4,7 +4,7 @@ import numpy as np
 import meds
 import ngmix
 import frogress
-from .image_processing_routines import CollectionOfImages,MedsStamp,GalaxyModelsTable,check_on_exposures,save_moments_targets,collapse,grid_search
+from .image_processing_routines import CollectionOfImages,MedsStamp,GalaxyModelsTable,check_on_exposures,assign_efficiency,save_moments_targets,collapse,grid_search
 
 import bfd
 from bfd.momenttable import TargetTable
@@ -32,6 +32,17 @@ def run_chunk(chunk,config, tile, dictionary_runs):
         print ('Initialising MEDS stamps')
         meds_array = [meds.MEDS(dictionary_runs[tile][band]['meds']) for band in config['bands_meds_files']]
 
+        
+        if config['slow_meds']:
+            img_array  = [ fits.open(dictionary_runs[tile][band]['meds'])['IMAGE_CUTOUTS'].data for band in config['bands_meds_files']]
+            mask_array = [ fits.open(dictionary_runs[tile][band]['meds'])['BMASK_CUTOUTS'].data for band in config['bands_meds_files']]
+            seg_array  = [ fits.open(dictionary_runs[tile][band]['meds'])['SEG_CUTOUTS'].data for band in config['bands_meds_files']]
+            psf_array  = [ fits.open(dictionary_runs[tile][band]['meds'])['psf'].data for band in config['bands_meds_files']]
+            w_array  =   [ fits.open(dictionary_runs[tile][band]['meds'])['weight_cutouts'].data for band in config['bands_meds_files']]
+            print ('Done loading slow stuff')
+
+
+        
         start =  config['chunk_size']*chunk
         end = int(np.min([config['chunk_size']*(chunk+1),meds_array[0].size]))
 
@@ -49,7 +60,14 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
 
         # Let's load into memory galaxy models. That is needed to do the neighbours subtraction.
-        models_path = glob.glob(config['path_galaxy_models']+'/'+tile+'*')
+        if '_shearm_' in tile:
+            tilem = tile.split('_shearm_')[0]
+        elif '_shearp_' in tile:
+            tilem = tile.split('_shearp_')[0]   
+        else:
+            tilem = copy.deepcopy(tile)
+            
+        models_path = glob.glob(config['path_galaxy_models']+'/'+tilem+'*')
         galaxy_models =  GalaxyModelsTable(models_path[0])
 
         # add models 
@@ -69,6 +87,13 @@ def run_chunk(chunk,config, tile, dictionary_runs):
         else:
             mask_exposure = None
 
+        
+        # Load the list of exposure efficiency and associate the value to each target
+        if config['efficiency_list']:
+            efficiency_list = np.load(config['efficiency_list'],allow_pickle=True).item()
+            efficiency_list = assign_efficiency(meds_array, efficiency_list,config['bands_meds_files'])
+        else:
+            efficiency_list = None
         
         timers = dict()
         timers['load MEDS'] = []
@@ -100,7 +125,7 @@ def run_chunk(chunk,config, tile, dictionary_runs):
             for c in combinations:
                 sn_array[c] = []
             
-        print ('Looping over targets')
+        print ('Looping over targets -- chunk',chunk)
 
 
         tab_targets = TargetTable(n = 4, sigma = config['filter_sigma'])
@@ -111,7 +136,11 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
             # Load images, psf, wcs, etc.
             start = timeit.default_timer()
-            Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].Load_MEDS(meds_index, meds_array = meds_array, mask_exposure = mask_exposure)
+            if config['slow_meds']:
+                Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].Load_MEDS(meds_index, meds_array = meds_array, mask_exposure = mask_exposure, psf_array = psf_array,img_array  = img_array ,mask_array = mask_array,seg_array  = seg_array , w_array = w_array,efficiency_list = efficiency_list)
+            else:
+                Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].Load_MEDS(meds_index, meds_array = meds_array, mask_exposure = mask_exposure, efficiency_list = efficiency_list)
+
             t1 = timeit.default_timer()
             timers['load MEDS'].append (t1-start)
 
@@ -251,7 +280,7 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                             mom, meb = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments.get_moment(0.,0.,returnbands=True)
 
                             # re-checking this because we're paranoic
-                            if len(meb) == len(config['bands_meds_files']):
+                            if (len(meb) == len(config['bands_meds_files'])) and (not Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].error_moments_recentering):
 
                                 # get covariances, and get per band flux covariances,  
                                 covm_even,covm_odd , covm_even_all , _ = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments.get_covariance(returnbands=True)
@@ -291,42 +320,39 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
                                     tab_targets.bad_exposures.append(number_of_bad_exposures_per_band)
                                     tab_targets.good_exposures.append(number_of_good_exposures_per_band)
-
-
-
+                                    tab_targets.weighted_efficiency.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].weighted_efficiency)
+                                    del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].weighted_efficiency
 
 
                                     try:
                                         tab_targets.psf_moment_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed)
-                                        tab_targets.cov_psf_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed_cov)
-                                        tab_targets.cov_psf_model.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_model_cov)
-                                        if config['add_noise_PSF_model']:
-                                            tab_targets.cov_psf_shotnoise.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_shotnoise_cov)
-                                                                              
-
-                                        
                                         del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed
-                                        del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed_cov
-                                        del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_model_cov
-                                        if config['add_noise_PSF_model']:
-                                            del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_shotnoise_cov
-                                        
-                                        
-                                                                                #
                                     except:
                                         tab_targets.psf_moment_obs.append(np.zeros(4))
+                                    try:
+                                        tab_targets.cov_psf_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed_cov)
+                                        del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_observed_cov
+                                    except:
                                         tab_targets.cov_psf_obs.append(np.zeros(15))
+                                    try:
+                                        tab_targets.cov_psf_model.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_model_cov)
+                                        del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_model_cov
+                                    except:
                                         tab_targets.cov_psf_model.append(np.zeros(15))
-                                        if config['add_noise_PSF_model']:
+ 
+                                    if config['add_noise_PSF_model']:
+                                        try:
+                                            tab_targets.cov_psf_shotnoise.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments_shotnoise_cov)
+                                        except:
                                             tab_targets.cov_psf_shotnoise.append(np.zeros(10))
-                                             
-
+                                        
             
                                     try:
                                         tab_targets.psf_hsm_moments_obs.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments_obs)
                                     except:
                                         tab_targets.psf_hsm_moments_obs.append(np.zeros(3))
-
+                                    
+                            
 
                                 t11 = timeit.default_timer()
                                 timers['extra_info'].append (t11-t10)  
@@ -420,10 +446,16 @@ def measure_moments_targets(**config,):
         config['reserved_stars_list'] = False
         print ('You did not provide any list of reserved stars; I will set the variable reserved_stars_list to False')
     
+    if 'efficiency_list' not in config.keys():
+        config['efficiency_list'] = False
+        print ('You did not provide any list of efficiency values; I will set the variable efficiency_list to False')
+    
+    
     if 'add_noise_PSF_model' not in config.keys():
         config['add_noise_PSF_model'] = False
 
-
+    if 'slow_meds' not in config.keys():
+        config['slow_meds'] = False
         
     # makes a dictionary of the tiles that need to be run
     dictionary_runs = dict()
@@ -479,7 +511,7 @@ def measure_moments_per_tile(config,dictionary_runs,tile):
     meds_array = [meds.MEDS(dictionary_runs[tile][band]['meds']) for band in config['bands_meds_files']]
 
         
-    
+
     
     chunk_size = config['chunk_size']
     runs = math.ceil(meds_array[0].size/chunk_size)

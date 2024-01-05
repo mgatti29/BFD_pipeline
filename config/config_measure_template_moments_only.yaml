@@ -1,14 +1,7 @@
-#srun --nodes=1 --tasks-per-node=128 --cpus-per-task=2 --cpu-bind=cores python ./run_bfd.py --config ./config/config_measure_target_moments_only.yaml --tiles DES0009-6248 --output_label _run1
-
-#srun --nodes=1 --tasks-per-node=128 --cpus-per-task=2 --cpu-bind=cores python ./run_bfd.py --config ./config/config_measure_target_moments_only.yaml --tiles DES0002-4206 --output_label _run1
-
-#srun --nodes=1 --tasks-per-node=128 --cpus-per-task=2 --cpu-bind=cores python ./run_bfd.py --config ./config/config_measure_target_moments_only.yaml  --output_label _run1
-
-
-#srun --nodes=4 --tasks-per-node=2  python ./run_bfd.py --config ./config/config_measure_template_moments_only.yaml 
+#srun --nodes=4 --tasks-per-node=1  python ./run_bfd.py --config ./config/config_measure_template_moments_only.yaml 
 run:
      - measure_moments_templates
-
+   # - make_templates
 ######################################################################
 #                       general config
 ######################################################################
@@ -36,15 +29,29 @@ general:
 
 measure_moments_templates:
 
-        max_frac_stamp_masked: 0.05
-        path_MEDS: '/global/cfs/cdirs/des/BFD_Y6/deep_fields_coadd_PIFF/'
-        desy3_DF: '/global/cfs/cdirs/des/BFD_Y6/deep_fields_coadd/deep_fields_y3kp2.h5'
-        path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/data/fitdv_df_collated/'
-       # path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/data/fitdv_ref/'
-        debug: False
-        debug_SN : False
-        fields: ['SN-E2'] #'COSMOS_UltraVISTA_Willv2'] #,'SN-E2', 'SN-X3','SN-C3'] #'COSMOS_UltraVISTA_Willv2'] #, 'SN-C3', 'SN-E2', 'SN-X3']
-        tiles: ['SN-E2_C22_r3688p02']
+    max_frac_stamp_masked: 0.05
+    path_MEDS: '/global/cfs/cdirs/des/BFD_Y6/deep_fields_coadd_PIFF/'
+    desy3_DF: '/global/cfs/cdirs/des/BFD_Y6/deep_fields_coadd/deep_fields_y3kp2.h5'
+    path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/data/fitdv_df_collated_2/'
+   # path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/data/fitdv_ref/'
+    debug: False
+    debug_SN : False
+    compute_shotnoise_fluxes: False # computes the shotnoise contribution to the fluxes for the high SN templates.
+    #fields: ['COSMOS_UltraVISTA_Willv2']
+    #tiles:  ['COSMOS_C27_r3764p01'] 
+
+
+    fields: ['COSMOS_UltraVISTA_Willv2','SN-E2','SN-X3','SN-C3'] 
+    tiles: 'All' 
             
-        
-        
+   
+   
+######################################################################
+#                      make templates
+######################################################################
+make_templates:
+    sigma_max: 5.5 # we only keep templates within sigma_max (chi2 includes MX,MY,Mf,det supression)
+    sigma_step: 1.2 #maximum shift between template
+    xy_max: 2         
+    sn_min: 7
+    

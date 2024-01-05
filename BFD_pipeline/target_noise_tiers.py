@@ -82,7 +82,10 @@ def target_noise_tiers( **config):
             table_for_integration = vstack([table_for_integration, selected_for_integration])  
             table_for_final_catalog = vstack([table_for_final_catalog, selected_for_final_catalog])  
 
-            # save a flux covariances map.
+            # save a full covariance map. -----------------------------------------------
+            
+            
+            # save a flux covariances map. ----------------------------------------------
             if config['flux_covariance_maps_nside']:
                 number_of_fluxes = table_for_final_catalog['Mf_per_band'].shape[1]
                 if i == 0:

@@ -5,6 +5,8 @@ from .measure_moments_targets import measure_moments_targets
 from .measure_moments_templates import measure_moments_templates
 from .target_noise_tiers import target_noise_tiers
 from .make_templates import make_templates
+from .simulated_MEDS import simulated_MEDS
+
 
 def BFD_pipeline(config):
     """
@@ -60,9 +62,15 @@ def BFD_pipeline(config):
             os.mkdir(config['general']['output_folder']+'/templates/')
         except:
             pass 
-                         
+                   
+    if not os.path.exists(config['general']['output_folder']+'/simulated_MEDS/'):
+        try:
+            os.mkdir(config['general']['output_folder']+'/simulated_MEDS/')
+        except:
+            pass 
+        
     #Add the general keys to all the other submodules
-    for key1 in ['measure_moments_templates','measure_moments_targets','target_noise_tiers','make_templates']:
+    for key1 in ['measure_moments_templates','measure_moments_targets','target_noise_tiers','make_templates','simulated_MEDS']:
             for key2 in config['general'].keys():
                 try:
                     config[key1][key2] = config['general'][key2]
@@ -71,6 +79,11 @@ def BFD_pipeline(config):
 
                 
     #Let's run the individual modules.
+    if config['run']!= None:
+        for entry in config['run']:
+            if entry == 'simulated_MEDS':  
+                simulated_MEDS(**config['simulated_MEDS'])
+            
     if config['run']!= None:
         for entry in config['run']:
             if entry == 'measure_moments_targets':  

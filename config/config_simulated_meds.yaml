@@ -1,0 +1,80 @@
+#srun --nodes=4 --tasks-per-node=4  python ./run_bfd.py --config ./config/config_simulated_meds.yaml --output_label _run1
+run:
+     - simulated_MEDS
+     #- target_noise_tiers
+     #- measure_moments_targets
+     #- measure_moments_templates
+######################################################################
+#                       general config
+######################################################################
+
+general:
+    output_folder:  '/pscratch/sd/m/mgatti/BFD/simulation_test_nonoise/' #'/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp_0.65_debug_SN/'
+    #output_folder:  '/pscratch/sd/m/mgatti/BFD/simulation_test/' #'/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp_0.65_debug_SN/'
+    
+    # BFD window function parameters. Defaults: n = 4, sigma = 0.65
+    filter_sigma: 0.65
+    
+    # per-band weights.
+    bands_meds_files: ['g','r','i','z']
+    bands_weights: [0.,0.6,0.3,0.1]
+
+    # pad factor for the FFT of the images. Default: 2. 
+    FFT_pad_factor: 2.
+    
+    # whether if you want to use MPI or not.
+    MPI: False
+
+        
+
+simulated_MEDS:
+    path_MEDS: '/pscratch/sd/m/mgatti/BFD/data/'
+    tiles: ['DES0023+0418']
+    chunk_size: 650
+    agents: 28
+    path_galaxy_models:  '/pscratch/sd/m/mgatti/BFD/models/'
+    path_df_meds: '/global/cfs/cdirs/des/BFD_Y6/deep_fields_coadd_PIFF/SN-E2/SN-E2_C01_r3688p02/'
+    #path_df_meds: '/pscratch/sd/m/mgatti/BFD/simulation_test_nonoise/simulated_MEDS/SN-E2/SN-E2_C01_r3688p02/'
+   
+   
+   #external_models: '/global/u2/m/mgatti/fresh_BFD/BFD_pipeline/data/all_100k_1_size.npy'
+    one_galaxy: 488
+    turb: [1,0.2]
+
+
+
+measure_moments_targets:
+    flagged_exp_list: '/global/homes/m/mgatti/fresh_BFD/BFD_pipeline/data/PSF_cuts.npy'
+    reserved_stars_list: '/global/homes/m/mgatti/fresh_BFD/BFD_pipeline/data/coadd_id_reserved_stars_c.npy.npz'
+    efficiency_list: '/global/homes/m/mgatti/fresh_BFD/BFD_pipeline/data/zero_point_efficiency.npy'
+    debug: False
+    debug_SN : False
+    max_frac_stamp_masked: 0.05
+    chunk_size: 650
+    agents: 1 #28 #28 #28 
+    slow_meds: True
+    
+    path_MEDS: '/pscratch/sd/m/mgatti/BFD/simulation_test_nonoise/simulated_MEDS/'
+    path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/models/'
+    #tiles: ['DES0009-6248']
+    tiles: ['DES0023+0418_shearm_']
+    
+    
+measure_moments_templates:
+
+    max_frac_stamp_masked: 0.05
+    path_MEDS: '/pscratch/sd/m/mgatti/BFD/simulation_test_nonoise/simulated_MEDS/'
+    desy3_DF: '/global/cfs/cdirs/des/BFD_Y6/deep_fields_coadd/deep_fields_y3kp2.h5'
+    path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/data/fitdv_df_collated_2/'
+   # path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/data/fitdv_ref/'
+    debug: False
+    debug_SN : False
+    slow_meds : True
+    compute_shotnoise_fluxes: False # computes the shotnoise contribution to the fluxes for the high SN templates.
+    #fields: ['COSMOS_UltraVISTA_Willv2']
+    #tiles:  ['COSMOS_C27_r3764p01'] 
+
+
+    fields: ['SN-E2'] 
+    tiles: ['SN-E2_C01_r3688p02']
+            
