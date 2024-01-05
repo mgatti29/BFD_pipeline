@@ -345,6 +345,9 @@ def save_moments_targets(self,fitsname):
 
         col.append(fits.Column(name="Mf_per_band",format="{0}E".format(l),array=self.meb))
         col.append(fits.Column(name="cov_Mf_per_band",format="{0}E".format(l),array=np.array(self.cov_Mf_per_band)))
+        col.append(fits.Column(name="cov_shot_noise_per_band",format="{0}E".format(l),array=np.array(self.cov_shot_noise)))
+        
+        
         col.append(fits.Column(name="mfrac_per_band",format="{0}E".format(l),array=np.array(self.mfrac_per_band)))
 
         col.append(fits.Column(name="DESDM_coadd_x",format="E",array=np.array(self.DESDM_coadd_x)))
@@ -900,7 +903,7 @@ class MedsStamp:
         
     def compute_moments(self, sigma = 3, FFT_pad_factor = 2., use_COADD_only = False, bands = ['g','r', 'i', 'z'], 
                                   bands_weights = [0.,0.7,0.2,0.1] , Detectinator_=False, 
-                        add_noise_PSF_model = False, compute_shotnoise_fluxes = False,force_compute = False):
+                        add_noise_PSF_model = False, compute_shotnoise = False,force_compute = False):
         '''
         Computes moments by combining exposures and bands.
         - sigma, FFT_pad_factor: Parameters for the BFD filter.
@@ -919,6 +922,7 @@ class MedsStamp:
         noise_array = []
         noise_array_psf = []
         band_array = []
+        efficiency_list = []
         
         psf_moments = np.zeros(4)
         psf_weights = 0
@@ -974,7 +978,7 @@ class MedsStamp:
                     weights_exposure += 1/noise_rms**2
                     if self.efficiency_exp is not None:
                         weighted_efficiency_band += self.efficiency_exp[index_band][exp-1]/noise_rms**2
-                   
+                        efficiency_list.append(self.efficiency_exp[index_band][exp-1])
 
             
                     if add_noise_PSF_model:
@@ -1028,59 +1032,39 @@ class MedsStamp:
         self.weighted_efficiency = weighted_efficiency
             
         # compute image  moments ------------------------------------------------
+
         kds, psf_shifts = bfd.multiImage(images_array, (0,0), psf_array, wcs_array, 
-                             pixel_noiselist = noise_array, bandlist = band_array,
-                             pad_factor=FFT_pad_factor, psf_recenter_sigma = 2.)
+                    pixel_noiselist = noise_array, bandlist = band_array,
+                   pad_factor=FFT_pad_factor, psf_recenter_sigma = 2.)
+
+            
+
         
         bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
         multi_moment = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
         self.xyshift, self.error_moments_recentering,msg = multi_moment.recenter()
+        
+        
+   
+        if compute_shotnoise:
+            cov_shot_noise = np.zeros(len(bands))
+            cov_shot_noise_w = np.zeros(len(bands))
+
+            for i,mc_ in enumerate(multi_moment.mc):
+                band_index = (np.arange(len(bands))[np.in1d(bands,band_array[i])])[0]
+                img_ = images_array[i]
+                #img_[img_<2*noise_array[i]] = 0.
+                cov_shot_noise_i = mc_.get_shotnoise(img_,eta=efficiency_list[i],dx=-self.xyshift[0],dy=-self.xyshift[1])
+                cov_shot_noise[band_index] += cov_shot_noise_i[0,0]/noise_rms**2
+                cov_shot_noise_w[band_index] += 1/noise_rms**2
+            for band_index in range(len(bands)):
+                cov_shot_noise[band_index] /= cov_shot_noise_w[band_index]
+
+            self.cov_shot_noise = cov_shot_noise
+
         self.moments = multi_moment
         
-        # compute shot noise contributions ------------------------------------
-        if compute_shotnoise_fluxes:
-            # let's compute it only for the brightest guys
-            # rough SN estimate of how the DF galaxy would look like in the wide field.
-            
-            mom, meb = multi_moment.get_moment(0.,0.,returnbands=True)
-                                    
-            if (mom.even[0]/np.sqrt(5e4))>100:
-                print (mom.even[0]/np.sqrt(5e4))
-                '''
-                cov = []
-                mask_array = []
-                for i in range(len(images_array)):
-                    mask_array.append(images_array[i]/noise_array[i]-1>4.)
 
-                for rel in range(100):
-                    new_images_array = []
-                    for i in range(len(images_array)):
-                        img_ = copy.deepcopy(images_array[i])
-                        s0 = img_.shape[0]
-                        random_noise = np.random.normal(size = (s0,s0))
-                        img_[mask_array[i]] += random_noise[mask_array[i]]*np.sqrt(img_[mask_array[i]])
-                        new_images_array.append(img_)
-
-                    kds, psf_shifts = bfd.multiImage(new_images_array, (0,0), psf_array, wcs_array, 
-                                 pixel_noiselist = noise_array, bandlist = band_array,
-                                 pad_factor=FFT_pad_factor) #, psf_recenter_sigma = 2.)
-
-
-                    bandinfo = {'bands':bands, 'weights':bands_weights,'index': np.arange(len(bands))} 
-                    multi_moments_shotnoise = bfd.MultiMomentCalculator(kds, BFD_filter, bandinfo = bandinfo)
-                    multi_moments_shotnoise.recenter()
-
-                    mom, meb = multi_moments_shotnoise.get_moment(0.,0.,returnbands=True)
-                    meb_ = np.array([m_.even for m_ in meb])
-                    meb = meb_[:,0]
-                    cov.append(meb)
-                cov = np.cov(np.array(cov).T)
-                self.flux_moments_shotnoise_covariance = cov
-                '''
-            else:
-                self.flux_moments_shotnoise_covariance = np.zeros((len(bands),len(bands)))
-
-        
         
         # compute PSF  moments ------------------------------------------------
         wcs_array_corrected = []

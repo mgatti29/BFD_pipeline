@@ -234,13 +234,14 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
                         # Compute moments
                  
-                        try:
-                        #if 1==1:
+                        #try:
+                        if 1==1:
                             Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].compute_moments(config['filter_sigma'], 
                                                            use_COADD_only =False, 
                                                            bands = config['bands_meds_files'],
                                                            bands_weights = config['bands_weights'], 
-                                                           FFT_pad_factor=config['FFT_pad_factor'], add_noise_PSF_model = config['add_noise_PSF_model'])
+                                                           FFT_pad_factor=config['FFT_pad_factor'], add_noise_PSF_model = config['add_noise_PSF_model'],
+                                                                                                     compute_shotnoise = config['compute_shotnoise'])
 
 
 
@@ -310,6 +311,13 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                     tab_targets.bkg.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].bkg)
                                     tab_targets.pixel_used_bkg.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].pixel_used_bkg)
                                     tab_targets.cov_Mf_per_band.append(covm_even_all[0,0,:])
+                                    
+                                    try:
+                                        tab_targets.cov_shot_noise.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].cov_shot_noise)
+                                    except:
+                                        tab_targets.cov_shot_noise.append(np.zeros(len(config['bands_meds_files'])))
+                                   
+                                        
                                     tab_targets.meb.append(meb)
 
                                     orig_row_flattened,orig_col_flattened, ccd_name_flattened = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].return_orig_coordinates()
@@ -364,8 +372,8 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments       
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments  
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments      
-                        except:
-                            print ('FAILED moments computation, meds index: ', meds_index)
+                        #except:
+                        #    print ('FAILED moments computation, meds index: ', meds_index)
                         
              
             
@@ -453,7 +461,11 @@ def measure_moments_targets(**config,):
     
     if 'add_noise_PSF_model' not in config.keys():
         config['add_noise_PSF_model'] = False
-
+        
+    
+    if 'compute_shotnoise' not in config.keys():
+        config['compute_shotnoise'] = False
+    
     if 'slow_meds' not in config.keys():
         config['slow_meds'] = False
         

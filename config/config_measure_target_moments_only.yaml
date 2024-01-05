@@ -8,7 +8,7 @@ run:
 ######################################################################
 
 general:
-    output_folder:  '/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp_0.65_fiducial_2_opt' #'/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp_0.65_debug_SN/'
+    output_folder:  '/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp_0.65_fiducial_2_' #'/pscratch/sd/m/mgatti/BFD/_test_bfd_y6kp_0.65_debug_SN/'
     
     # BFD window function parameters. Defaults: n = 4, sigma = 0.65
     filter_sigma: 0.65
@@ -33,10 +33,11 @@ measure_moments_targets:
     reserved_stars_list: '/global/homes/m/mgatti/fresh_BFD/BFD_pipeline/data/coadd_id_reserved_stars_c.npy.npz'
     efficiency_list: '/global/homes/m/mgatti/fresh_BFD/BFD_pipeline/data/zero_point_efficiency.npy'
     debug: False
-    debug_SN : True
+    debug_SN : False
+    compute_shotnoise: True
     max_frac_stamp_masked: 0.05
     chunk_size: 650
-    agents: 28 
+    agents: 1
     
     path_MEDS: '/pscratch/sd/m/mgatti/BFD/data/'
     path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/models/'
