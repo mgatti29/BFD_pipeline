@@ -37,7 +37,7 @@ measure_moments_targets:
     compute_shotnoise: True
     max_frac_stamp_masked: 0.05
     chunk_size: 650
-    agents: 1
+    agents: 28
     
     path_MEDS: '/pscratch/sd/m/mgatti/BFD/data/'
     path_galaxy_models: '/pscratch/sd/m/mgatti/BFD/models/'
