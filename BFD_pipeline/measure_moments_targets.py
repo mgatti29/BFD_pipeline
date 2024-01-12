@@ -234,8 +234,8 @@ def run_chunk(chunk,config, tile, dictionary_runs):
 
                         # Compute moments
                  
-                        #try:
-                        if 1==1:
+                        try:
+                        #if 1==1:
                             Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].compute_moments(config['filter_sigma'], 
                                                            use_COADD_only =False, 
                                                            bands = config['bands_meds_files'],
@@ -372,8 +372,8 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].moments       
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_hsm_moments  
                                 del Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].psf_moments      
-                        #except:
-                        #    print ('FAILED moments computation, meds index: ', meds_index)
+                        except:
+                            print ('FAILED moments computation, meds index: ', meds_index)
                         
              
             
