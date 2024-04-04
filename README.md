@@ -14,7 +14,7 @@ recently tested with python 3.6.3
 - frogress (0.9.1)
 - numba (0.53.1)
 - scipy (1.5.4)
-- ngmix (2.2.1) [https://github.com/esheldon/ngmix.git]
+- ngmix (1.3.8) [https://github.com/esheldon/ngmix.git]
 - galsim (2.4.5)
 - LSSTDESC.Coord (1.2.3) [installed by galsim automatically]
 - astropy (4.1) [installed by galsim automatically]
