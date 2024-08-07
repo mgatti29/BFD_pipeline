@@ -717,8 +717,10 @@ class CollectionOfImages:
                 
                     model_rendered_band.append(rendered_image)
                     if image_self is not None:
-                        rendered_image += image_self
-                    model_rendered_all_band.append(rendered_image)
+                        model_rendered_all_band.append(rendered_image+copy.deecopy(image_self))
+                    else:
+                         model_rendered_all_band.append(rendered_image)
+                        
                 else:
                     flag_rendered_models_band.append(False)
                     model_rendered_band.append(None) 
