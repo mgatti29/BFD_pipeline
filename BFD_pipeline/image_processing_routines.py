@@ -215,7 +215,7 @@ def check_on_exposures(meds_array, exposure_list,bands):
         # For the first band, extract the exposure numbers from the image paths.
         # The exposure number is assumed to be at the start of the file name,
         # following a specific pattern ('red/D00'). This number is converted to an integer.
-        exposures_MEDS[index_band] = np.unique(np.array([np.int(get_expnum(image_path)) for image_path in images_path[index_band]]))
+        exposures_MEDS[index_band] = np.unique(np.array([int(get_expnum(image_path)) for image_path in images_path[index_band]]))
         
     mask_exposure = dict()
     for index_band,band in enumerate(bands):
@@ -247,7 +247,7 @@ def assign_efficiency(meds_array, efficiency_list,bands):
         # For the first band, extract the exposure numbers from the image paths.
         # The exposure number is assumed to be at the start of the file name,
         # following a specific pattern ('red/D00'). This number is converted to an integer.
-        exposures_MEDS[band] = np.unique(np.array([np.int(get_expnum(image_path)) for image_path in images_path[index_band]]))
+        exposures_MEDS[band] = np.unique(np.array([int(get_expnum(image_path)) for image_path in images_path[index_band]]))
 
         efficiency_list_output = dict()
     for index_band,band in enumerate(bands):
@@ -313,8 +313,7 @@ def save_moments_targets(self,fitsname):
 
         col.append(fits.Column(name="ra",format="D",array= np.array(self.xy)[:,0]))
         col.append(fits.Column(name="dec",format="D",array=np.array(self.xy)[:,1]))
-
-
+        col.append(fits.Column(name="xyshift",format="2D",array=np.array(self.xyshift)))
         col.append(fits.Column(name="moments",format="5E",array=np.array(self.moment)))  
         col.append(fits.Column(name="covariance",format="15E",array=np.array(self.cov).astype(np.float32)))
         col.append(fits.Column(name="covariance_psf_obs",format="15E",array=np.array(self.cov_psf_obs).astype(np.float32)))
@@ -566,13 +565,13 @@ class CollectionOfImages:
             models_parameters = dict()
             
             try:
-                pos_epoch = (np.array(self.pos_epoch.loc[ MEDS_stamp.coadd_ID[0]]).astype(np.int))[:,0]
+                pos_epoch = (np.array(self.pos_epoch.loc[ MEDS_stamp.coadd_ID[0]]).astype(int))[:,0]
             except:
-                pos_epoch = (np.array(self.pos_epoch.loc[ MEDS_stamp.coadd_ID[0]]).astype(np.int))[0]    
+                pos_epoch = (np.array(self.pos_epoch.loc[ MEDS_stamp.coadd_ID[0]]).astype(int))[0]    
                 
             for band in MEDS_stamp.bands:
                 try:
-                    models_parameters[band] = galaxy_models_table.return_model(band = band, pos = pos, pos_epoch = pos_epoch)
+                    models_parameters[band] = galaxy_models_table.return_model(band = band, pos = int(pos), pos_epoch = pos_epoch)
                 except:
                     print ('failed rendering model for entry {0}, band [{1}]'.format( MEDS_stamp.MEDS_index,band))
                     MEDS_stamp.flags += 2
@@ -582,6 +581,23 @@ class CollectionOfImages:
             
             
 
+    def check_central_model_rendering(self,MEDS_index = 0,use_COADD_only=False):
+        model_central_to_be_rendered = False
+
+
+        for b, band in enumerate(self.MEDS_stamps[MEDS_index].bands):
+            if use_COADD_only:
+                start = 0
+                end = 1
+            else:
+                start = 1
+                end = self.MEDS_stamps[MEDS_index].ncutout[b]
+
+            for i in range( end): 
+                if i >= start:
+                    if (self.MEDS_stamps[MEDS_index].mfrac_inner[b][i] > 0) and (self.MEDS_stamps[MEDS_index].mfrac_flag[b][i]) :
+                        model_central_to_be_rendered = True
+        return model_central_to_be_rendered
 
 
         
@@ -637,7 +653,7 @@ class CollectionOfImages:
                         #'''
                         if (self.MEDS_stamps[MEDS_index].mfrac_inner[b][i] > 0) and (self.MEDS_stamps[MEDS_index].mfrac_flag[b][i]) :
 
-
+                            #print ('I am inside')
                             gmix_sky  = ngmix.gmix.GMixBDF(self.MEDS_stamps[MEDS_index].model_parameters[band]['gal_pars'])
                             det = np.abs(wcs.getdet()) 
                             jac = ngmix.jacobian.Jacobian(  row=wcs.xy0[1],
@@ -650,12 +666,12 @@ class CollectionOfImages:
 
 
                             image_self = det*gmix_image.make_image((size_image, size_image), jacobian=jac)
-
+                            #print ('I am done inside')
                         else:
 
                             image_self = None
                         #'''
-                        image_self = None
+                      #  image_self = None
                     
                         central_went_wrong = False
                     except:
@@ -715,12 +731,19 @@ class CollectionOfImages:
                                 pass
                         flag_rendered_models_band.append(flag_rendered_models_band_i)
                 
+                   # if image_self is not None:
+                   #     model_rendered_band.append(rendered_image+copy.deepcopy(image_self))
+                   # else:
                     model_rendered_band.append(rendered_image)
-                    if image_self is not None:
-                        model_rendered_all_band.append(rendered_image+copy.deecopy(image_self))
-                    else:
-                         model_rendered_all_band.append(rendered_image)
                         
+                    if image_self is not None:
+                        #rendered_image += image_self
+                        model_rendered_all_band.append(rendered_image+copy.deepcopy(image_self))
+                    else:
+                        model_rendered_all_band.append(rendered_image)
+                        
+                    #if image_self is not None:
+                    #    print ('I am adding stuff  ',MEDS_index, b,i, np.sum(model_rendered_all_band[-1].flatten()), np.sum(model_rendered_band[-1].flatten()))
                 else:
                     flag_rendered_models_band.append(False)
                     model_rendered_band.append(None) 
@@ -857,14 +880,14 @@ class MedsStamp:
         self.mfrac_inner = mfrac_inner
                 
                 
-  
+                
+
         #mfrac_per_band = []
         #for b in range(len(self.bands)):
         #    mfrac_per_band.append(np.mean(np.array(self.mfrac[b])))
         #self.mfrac_per_band = mfrac_per_band
         bands_not_masked = dict()
         mfrac_per_band = np.zeros(len(self.bands))
-        
         mfrac_per_band_w = np.zeros(len(self.bands))
         for b in range(len(self.bands)):
             bands_not_masked[self.bands[b]] = True
@@ -884,12 +907,23 @@ class MedsStamp:
                     else:
                         bands_not_masked[self.bands[b]] = True
                         
-                        mfrac_per_band[b] += self.mfrac[b][0]
+                        mfrac_per_band[b] += self.mfrac[b][i]
                         mfrac_per_band_w[b] += 1
                   
+                
+            
         self.mfrac_per_band = (mfrac_per_band/mfrac_per_band_w)
         self.mfrac_per_band[mfrac_per_band_w==0] = -1.
         
+        
+        # add a flag
+        self.flag_inner = 0
+     
+        for b in range(len(self.bands)):
+            for i in range(1, self.ncutout[b]):
+                if (self.mfrac[b][i] < limit) and (self.mfrac_inner[b][i] > 0) and (self.mfrac_flag[b][i]):
+                    self.flag_inner = 1
+
         bands_not_masked_list = []
         for b in bands_not_masked.keys():
             if bands_not_masked[b]:
@@ -1074,11 +1108,28 @@ class MedsStamp:
         psf_array_2 = []
         for i in range(len(kds)):
             nominal = np.array(psf_array[i].shape) // 2
-            origin = (0.,0.)
 
-            wcs_psf = wcs_array[i]
-            wcs_psf.xy0 = (nominal+[psf_shifts[i][1],psf_shifts[i][0]])
+            wcs_psf = bfd.WCS(wcs_array[i].jac, wcs_array[i].xy0, wcs_array[i].uv0)
+
+            try:
+                wcs_psf.xy0 = bfd.xyWin(psf_array[i], sigma=2.)[::-1]
+            except:
+                print("Failed to find PSF center, using WCS center")
+
+                if wcs_psf.xy0[0]<(nominal[0] - 0.5):
+                    wcs_psf.xy0[0] += 1.
+
+                if wcs_psf.xy0[1]<(nominal[1] - 0.5):
+                    wcs_psf.xy0[1] += 1.
+
             wcs_array_corrected.append(wcs_psf)
+            
+            
+        delta_stamp_array = []
+        psf_array_2 = []
+        for i in range(len(kds)):
+            nominal = np.array(psf_array[i].shape) // 2
+            origin = (0.,0.)
 
             delta_stamp = np.zeros_like(psf_array[i])
             delta_stamp[nominal[0],nominal[1]] = 1.
@@ -1088,8 +1139,10 @@ class MedsStamp:
                      pixel_noiselist = noise_array_psf, bandlist = band_array,
                      pad_factor=FFT_pad_factor) 
             
+            
+            
         psf_moment = bfd.MultiMomentCalculator(psf_kd, BFD_filter, bandinfo = bandinfo)
-        psf_moment.recenter()
+        #psf_moment.recenter()
         Mf,Mr,M1,M2,_ = psf_moment.get_moment(0.,0.).even
         self.psf_moments  = np.array([Mf,Mr,M1,M2])
         
@@ -1325,8 +1378,8 @@ class MedsStamp:
             
 
             #get ccd numbers ----
-            self.ccd_name =  [[ 1000*b+np.int(get_ccdnum(meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]])) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]  
-            self.expnum =  [[ np.int(get_expnum(meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]])) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]
+            self.ccd_name =  [[ 1000*b+int(get_ccdnum(meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]])) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]  
+            self.expnum =  [[ int(get_expnum(meds_array[b]._image_info['image_path'][meds_array[b]['file_id'][index][i]])) for i in range(1,(self.ncutout[b]))] for b in range(len(self.bands))]
           
 
         
@@ -1665,12 +1718,12 @@ class MedsStamp:
                     size_psf_y = self.psf[index_band][exp].shape[1]
                     # sometimes the PiFF stamp is larger than the image
                     if size_psf_x>size_x:
-                        dx = -np.int((size_x-size_psf_x)/2)
+                        dx = -int((size_x-size_psf_x)/2)
                         self.psf[index_band][exp] = self.psf[index_band][exp][dx:dx+size_x,:][:,dx:dx+size_x]
                         
                     # if the PiFF stamp is smaller than the image
                     elif size_psf_x<size_x:
-                        dx = np.int((size_x-size_psf_x)//2)+1
+                        dx = int((size_x-size_psf_x)//2)+1
                         mute[dx:dx+size_psf_x,:][:,dx:dx+size_psf_x] = self.psf[index_band][exp]
                         self.psf[index_band][exp] = mute
             

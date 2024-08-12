@@ -172,12 +172,20 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                 t3 = timeit.default_timer()
                 timers['make_WCS'].append(t3-t2)
 
+                
+        
+                model_central_to_be_rendered = Collection_of_wide_field_galaxies.check_central_model_rendering(MEDS_index = meds_index,use_COADD_only = False)
+                
+                continue_with_pipeline = True
+                if (config['keep_only_galaxy_with_central_models'] and (not model_central_to_be_rendered)):
+                    continue_with_pipeline = False
+                
                 # let's render the galaxy models
                 bands_with_a_model = Collection_of_wide_field_galaxies.render_models(MEDS_index = meds_index, render_self = False, render_others = True,use_COADD_only = False)
                 t4 = timeit.default_timer()
                 timers['render_models'].append(t4-t3)
 
-                if sum([band in bands_with_a_model for band in config['bands_meds_files']]) == len(config['bands_meds_files']):
+                if (sum([band in bands_with_a_model for band in config['bands_meds_files']]) == len(config['bands_meds_files'])) and continue_with_pipeline:
 
 
                     # compute psf HSM moments  
@@ -312,6 +320,10 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                     tab_targets.pixel_used_bkg.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].pixel_used_bkg)
                                     tab_targets.cov_Mf_per_band.append(covm_even_all[0,0,:])
                                     
+                                    
+                                    tab_targets.xyshift.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].xyshift)
+                                    
+                                    
                                     try:
                                         tab_targets.cov_shot_noise.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].cov_shot_noise)
                                     except:
@@ -324,7 +336,12 @@ def run_chunk(chunk,config, tile, dictionary_runs):
                                     tab_targets.orig_row.append(orig_row_flattened)
                                     tab_targets.orig_col.append(orig_col_flattened)
                                     tab_targets.ccd_name.append(ccd_name_flattened)
-                                    tab_targets.mfrac_per_band.append(Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].mfrac_per_band)
+                                
+                                
+                             
+                                    mfrb = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].mfrac_per_band
+                                    mfrb[0] = Collection_of_wide_field_galaxies.MEDS_stamps[meds_index].flag_inner
+                                    tab_targets.mfrac_per_band.append( mfrb)
 
                                     tab_targets.bad_exposures.append(number_of_bad_exposures_per_band)
                                     tab_targets.good_exposures.append(number_of_good_exposures_per_band)
@@ -468,6 +485,10 @@ def measure_moments_targets(**config,):
     
     if 'slow_meds' not in config.keys():
         config['slow_meds'] = False
+
+    if 'keep_only_galaxy_with_central_models' not in config.keys():
+        config['keep_only_galaxy_with_central_models'] = False
+        
         
     # makes a dictionary of the tiles that need to be run
     dictionary_runs = dict()
